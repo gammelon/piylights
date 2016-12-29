@@ -1,15 +1,14 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 from __future__ import division
 
-from pyqtgraph.Qt import QtGui, QtCore
-#from pyqtgraph.Qt import QtCore
 import numpy as np
 from scipy.signal import filtfilt
 from numpy import nonzero, diff
 
-import pyqtgraph as pg
 from recorder import SoundCardDataSource
+import threading
+import time
 
 
 # Based on function from numpy 1.8
@@ -105,25 +104,23 @@ def fft_buffer(x):
     return Pxx ** 0.5
 
 
-class LiveFFTWindow(pg.GraphicsWindow):
+class LiveFFTWindow(threading.Thread):
     def __init__(self, recorder):
-        super(LiveFFTWindow, self).__init__(title="Live FFT")
+        super(LiveFFTWindow, self).__init__()
         self.recorder = recorder
-        self.paused = False
         self.logScale = True
         self.showPeaks = False
-        self.downsample = True
 
         self.timeValues = self.recorder.timeValues
         self.freqValues = rfftfreq(len(self.timeValues), 1./self.recorder.fs)
 
-        # Timer to update plots
-        self.timer = QtCore.QTimer()
-        self.timer.timeout.connect(self.update)
-        interval_ms = 1000 * (self.recorder.chunk_size / self.recorder.fs)
-#        interval_ms = 20
-        print "Updating graphs every %.1f ms" % interval_ms
-        self.timer.start(interval_ms)
+
+    def run(self):
+        interval_s = (self.recorder.chunk_size / self.recorder.fs)
+        print ("Updating graphs every %.1f ms" % (interval_s*1000))
+        while(True):
+            time.sleep(interval_s)
+            self.update()
 
     def resetRanges(self):
         self.timeValues = self.recorder.timeValues
@@ -131,12 +128,10 @@ class LiveFFTWindow(pg.GraphicsWindow):
 
 
     def update(self):
-        if self.paused:
-            return
         data = self.recorder.get_buffer()
         weighting = np.exp(self.timeValues / self.timeValues[-1])
         Pxx = fft_buffer(weighting * data[:, 0])
-        Pxx = np.log10(Pxx)
+        Pxx = np.log10(Pxx + 1)
         self.length = int(len(Pxx) / 1)
         #print (self.length)
         pA, pB, pC = 0, 0, 0
@@ -147,16 +142,7 @@ class LiveFFTWindow(pg.GraphicsWindow):
         for element in Pxx[int(round(2/3 * self.length)): self.length]:
             pC+=element
 
-        print("" + str(pA) + "#" + str(pB) + "#" + str(pC))
-
-        if self.downsample:
-            downsample_args = dict(autoDownsample=False,
-                                   downsampleMethod='subsample',
-                                   downsample=10)
-        else:
-            downsample_args = dict(autoDownsample=True)
-
-        #self.ts.setData(x=self.timeValues, y=data[:, 0], **downsample_args)
+        print(str(round(pA)) + "   #   " + str(round(pB)) + "   #   " + str(round(pC)))
 
         #vvvvvv this is what we want!!!!
         #self.spec.setData(x=self.freqValues, y=(20*np.log10(Pxx) if self.logScale else Pxx))
@@ -164,14 +150,9 @@ class LiveFFTWindow(pg.GraphicsWindow):
 
     def keyPressEvent(self, event):
         text = event.text()
-        if text == " ":
-            self.paused = not self.paused
- #           self.p1.setTitle("PAUSED" if self.paused else "")
-        elif text == "l":
+        if text == "l":
             self.logScale = not self.logScale
             self.resetRanges()
-        elif text == "d":
-            self.downsample = not self.downsample
         elif text == "+":
             self.recorder.num_chunks *= 2
             self.resetRanges()
@@ -181,24 +162,16 @@ class LiveFFTWindow(pg.GraphicsWindow):
         else:
             super(LiveFFTWindow, self).keyPressEvent(event)
 
-
-# Setup plots
-#QtGui.QApplication.setGraphicsSystem('opengl')
-app = QtGui.QApplication([])
-#pg.setConfigOptions(antialias=True)
-
 # Setup recorder
 #FS = 12000
 #FS = 22000
 FS = 44100
 recorder = SoundCardDataSource(num_chunks=1,
                                sampling_rate=FS,
-                               chunk_size=1024)
+                               chunk_size=4096)
 #WHAT tweak chunk size to make this shit faster
 win = LiveFFTWindow(recorder)
 
-## Start Qt event loop unless running in interactive mode or using pyside.
 if __name__ == '__main__':
     import sys
-    if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
-        QtGui.QApplication.instance().exec_()
+    win.start()
