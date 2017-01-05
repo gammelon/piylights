@@ -94,9 +94,11 @@ class Piylights:
 
     
     def __init__(self, port):
-        self._method = self.linearAutorange
-        self.maxR = self.maxG = self.maxB = -99999
-        self.minR = self.minG = self.minB = -self.maxR
+        self._method = self.percentAutorange
+        self.minimal = [100000] * 3
+        self.maximal = [-100000] * 3
+        self.triples = {"min" : self.minimal, "max" : self.maximal}
+        self.rgb = (0, 0, 0)
         self._livefft = self.Livefft(self)
         self._server = self.ThreadedUDPServer(("localhost", port), self.UDPHandler)
         self._server.piylights = self
@@ -109,41 +111,27 @@ class Piylights:
         self.writeValues()
 
     def raw(self, r, g, b):
-        self.maxR = max(r, self.maxR)
-        self.minR = min(r, self.minR) - 0.00001 #avoid max-min = 0
-        self.maxG = max(g, self.maxG)
-        self.minG = min(g, self.minG) - 0.00001
-        self.maxB = max(b, self.maxB)
-        self.minB = min(b, self.minB) - 0.00001
-        self.r = (r - self.minR) / (self.maxR - self.minR)
-        self.g = (g - self.minG) / (self.maxG - self.minG)
-        self.b = (b - self.minB) / (self.maxB - self.minB)
+        self.rgb = [r, g, b]
+        for i in range(3):
+            self.triples["min"][i] = min(self.triples["min"][i], self.rgb[i])
+            self.triples["max"][i] = max(self.triples["max"][i], self.rgb[i]) + 0.000001
+        for i in range(3):
+            self.rgb[i] = (self.rgb[i] - self.triples["min"][i]) \
+                    / (self.triples["max"][i] - self.triples["min"][i])
 
     def linearAutorange(self, r, g, b):
         linearFactor = 0.005
-        self.maxR -= linearFactor
-        self.maxG -= linearFactor
-        self.maxB -= linearFactor
-        self.minR += linearFactor
-        self.minG += linearFactor
-        self.minB += linearFactor
+        for i in range(3):
+            self.triples["max"][i] -= linearFactor
+            self.triples["min"][i] += linearFactor
         self.raw(r, g, b)
-        self.r = (r - self.minR) / (self.maxR - self.minR)
-        self.g = (g - self.minG) / (self.maxG - self.minG)
-        self.b = (b - self.minB) / (self.maxB - self.minB)
 
     def percentAutorange(self, r, g, b):
         percent = 0.0006
-        self.maxR *= (1 - percent)
-        self.maxG *= (1 - percent)
-        self.maxB *= (1 - percent)
-        self.minR *= (1 + percent)
-        self.minG *= (1 + percent)
-        self.minB *= (1 + percent)
+        for i in range(3):
+            self.triples["max"][i] *= (1 - percent)
+            self.triples["min"][i] *= (1 + percent)
         self.raw(r, g, b)
-        self.r = (r - self.minR) / (self.maxR - self.minR)
-        self.g = (g - self.minG) / (self.maxG - self.minG)
-        self.b = (b - self.minB) / (self.maxB - self.minB)
     
     def controlString(self, s):
         print(s)
@@ -153,13 +141,10 @@ class Piylights:
             #todo make this work
 
     def writeValues(self):
-        limit = 30 
-        r = int(self.r * limit)
-        g = int(self.g * limit)
-        b = int(self.b * limit)
-        print(str(int(self.minR)) + "]R[" + r * "=" + (limit-r) * " " + "][" + str(int(self.maxR)))
-        print(str(int(self.minG)) + "]G[" + g * "=" + (limit-g) * " " + "][" + str(int(self.maxG)))
-        print(str(int(self.minB)) + "]B[" + b * "=" + (limit-b) * " " + "][" + str(int(self.maxB)))
+        limit = 30
+        scaled = list(map(lambda x: int(x * limit), self.rgb))
+        for i in range(3):
+            print(str(int(self.triples["min"][i])) + "][" + scaled[i] * "=" + (limit-scaled[i]) * " " + "][" + str(int(self.triples["max"][i])))
         print("\n")
 
 
