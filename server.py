@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import random
 RASPI = False
 if "arm" in os.uname():
     RASPI = True
@@ -15,6 +16,7 @@ from numpy import nonzero, diff
 from recorder import SoundCardDataSource
 import threading
 import time
+import colorsys
 
 class Piylights:
 
@@ -58,8 +60,8 @@ class Piylights:
                 Pxx = np.log10(Pxx + 1)*20
                 self.length = int(len(Pxx) / 1)
                 pA, pB, pC = 0, 0, 0
-                bass = 1/50
-                mid = 1/4
+                bass = 1/100
+                mid = 1/10
                 for element in Pxx[0: int(round(bass * self.length))]:
                     pA+=element
                 for element in Pxx[int(round(bass * self.length)): int(round(mid * self.length))]:
@@ -94,11 +96,19 @@ class Piylights:
 
     
     def __init__(self, port):
-        self._method = self.percentAutorange
+        self._method = self.changeWithChannel
+        self._limitmethod = self.percentAutorange
+        self._colormethod = self.nextColor
+        self.lastchange = os.times()[4]
+        self.lastcolor = (1, 0, 0)
+        #self.channelthreshold = [ ( [0], 0.7 ), ( [1], 0.75 ), ( [2], 0.75), ( [0, 1, 2], 0.65 ) ] #0 bass 1 mid 2 treble
+        self.channelthreshold = [ ( [0], 0.65 ) ] #0 bass 1 mid 2 treble
+        self.cooldown = .1 # seconds to wait before changing again
         self.minimal = [100000] * 3
         self.maximal = [-100000] * 3
         self.triples = {"min" : self.minimal, "max" : self.maximal}
         self.rgb = (0, 0, 0)
+        self.colorswitch = 0 
         self._livefft = self.Livefft(self)
         self._server = self.ThreadedUDPServer(("localhost", port), self.UDPHandler)
         self._server.piylights = self
@@ -132,7 +142,30 @@ class Piylights:
             self.triples["max"][i] *= (1 - percent)
             self.triples["min"][i] *= (1 + percent)
         self.raw(r, g, b)
+
+    def randomColor(self):
+        return colorsys.hsv_to_rgb(random.random(), 1, 1)
     
+    def nextColor(self):
+        self.colorswitch = 0 if self.colorswitch >= 5/6 - 0.00001 else self.colorswitch + 1/6
+        return colorsys.hsv_to_rgb(self.colorswitch, 1, 1)
+    
+    def changeWithChannel(self, r, g, b):
+        self._limitmethod(r, g, b)
+        self.writeValues()
+        if (os.times()[4] - self.lastchange) < self.cooldown:
+            self.rgb = self.lastcolor
+            return
+        self.lastchange = os.times()[4]
+
+        for channels, threshold in self.channelthreshold:
+            if (sum([self.rgb[i] for i in channels]) > (threshold * (len(channels)))):
+                self.rgb = self._colormethod()
+                self.lastcolor = self.rgb
+                return
+        self.rgb = self.lastcolor
+
+
     def controlString(self, s):
         print(s)
         if (s == "quit"):
