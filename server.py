@@ -29,6 +29,7 @@ class Piylights:
                 self.recorder = recorder
                 self._piylights = piylights
                 self.timeValues = self.recorder.timeValues
+                self.interval_s = (self.recorder.chunk_size / self.recorder.fs)
 
             def fft_buffer(self, x):
                 window = np.hanning(x.shape[0])
@@ -47,10 +48,9 @@ class Piylights:
                 return Pxx ** 0.5
 
             def run(self):
-                interval_s = (self.recorder.chunk_size / self.recorder.fs)
-                print ("Updating graphs every %.1f ms" % (interval_s*1000))
+                print ("Updating graphs every %.1f ms" % (self.interval_s*1000))
                 while(True):
-                    time.sleep(interval_s)
+                    time.sleep(self.interval_s)
                     self.update()
 
             def update(self):
@@ -60,26 +60,29 @@ class Piylights:
                 Pxx = np.log10(Pxx + 1)*20
                 self.length = int(len(Pxx) / 1)
                 pA, pB, pC = 0, 0, 0
-                bass = 1/100
-                mid = 1/10
+                bass = self._piylights.parameters["upper_limit_bass"]
+                mid = self._piylights.parameters["upper_limit_mid"]
+                #print(int(round(bass * self.length)))
+                #print(int(round(mid * self.length)))
                 for element in Pxx[0: int(round(bass * self.length))]:
                     pA+=element
                 for element in Pxx[int(round(bass * self.length)): int(round(mid * self.length))]:
                     pB+=element
                 for element in Pxx[int(round(mid * self.length)): self.length]:
                     pC+=element
-                self._piylights.update(pA, pB, pC)
+                self._piylights.update([pA, pB, pC])
 
-                #print(str(round(pA)) + "   #   " + str(round(pB)) + "   #   " + str(round(pC)))
+                ##print(str(round(pA)) + "   #   " + str(round(pB)) + "   #   " + str(round(pC)))
 
 
         def __init__(self, piylights):
             # Setup recorder
             FS = 44100
-            recorder = SoundCardDataSource(num_chunks=1, sampling_rate=FS, chunk_size=256)
+            recorder = SoundCardDataSource(num_chunks=1, sampling_rate=FS, chunk_size=768)
             #WHAT tweak chunk size to make this shit faster
 
             win = self.LiveFFTWindow(recorder, piylights)
+            self.interval_s = win.interval_s
             win.daemon = True
             win.start()
 
@@ -97,73 +100,108 @@ class Piylights:
     
     def __init__(self, port):
         self._method = self.changeWithChannel
-        self._limitmethod = self.percentAutorange
-        self._colormethod = self.nextColor
+        self.parameters = { "range_narrow_constant" : .000,\
+                "active" : True,\
+                "range_extend_linear" : .4,\
+                "range_narrow_linear" : .005,\
+                "colorchange_cooldown" : .1,\
+                "next_color_step" : 1/6.0,\
+                "upper_limit_bass" : 1/100.0,\
+                "upper_limit_mid" : 1/10.0,\
+                "extend_autorange_method" : "max", # "max", "linear"\
+                "next_color_method" : "step",\
+                "pp_minimal_difference" : 4.0,\
+                "pp_minimal_difference_weight" : .5,\
+                }
         self.lastchange = os.times()[4]
         self.lastcolor = (1, 0, 0)
         #self.channelthreshold = [ ( [0], 0.7 ), ( [1], 0.75 ), ( [2], 0.75), ( [0, 1, 2], 0.65 ) ] #0 bass 1 mid 2 treble
         self.channelthreshold = [ ( [0], 0.65 ) ] #0 bass 1 mid 2 treble
-        self.cooldown = .1 # seconds to wait before changing again
-        self.minimal = [100000] * 3
-        self.maximal = [-100000] * 3
-        self.triples = {"min" : self.minimal, "max" : self.maximal}
-        self.rgb = (0, 0, 0)
+        self.triples = {"min" : [0] * 3, "max" : [10] * 3}
         self.colorswitch = 0 
         self._livefft = self.Livefft(self)
+        self.updatesPerSecond = self._livefft.interval_s * 60
         self._server = self.ThreadedUDPServer(("localhost", port), self.UDPHandler)
         self._server.piylights = self
         server_thread = threading.Thread(target=self._server.serve_forever)
         server_thread.daemon = True
         server_thread.start()
 
-    def update(self, r, g, b):
-        self._method(r, g, b)
-        self.writeValues()
+    def update(self, rgb):
+        if not self.parameters["active"]:
+            writeValues([0,0,0])
+            return
+        self.narrow_autorange(rgb)
+        self.extend_autorange(rgb)
+        self.post_process(rgb)
+        processed = self.writeValues(self.raw(rgb))
+        self.writeValues(self._method(processed))
 
-    def raw(self, r, g, b):
-        self.rgb = [r, g, b]
+    def raw(self, rgb):
         for i in range(3):
-            self.triples["min"][i] = min(self.triples["min"][i], self.rgb[i])
-            self.triples["max"][i] = max(self.triples["max"][i], self.rgb[i]) + 0.000001
-        for i in range(3):
-            self.rgb[i] = (self.rgb[i] - self.triples["min"][i]) \
+            rgb[i] = (rgb[i] - self.triples["min"][i]) \
                     / (self.triples["max"][i] - self.triples["min"][i])
+            rgb[i] = 0 if rgb[i] < 0 else rgb[i]
+            rgb[i] = 1 if rgb[i] > 1 else rgb[i]
+        return rgb
 
-    def linearAutorange(self, r, g, b):
-        linearFactor = 0.005
-        for i in range(3):
-            self.triples["max"][i] -= linearFactor
-            self.triples["min"][i] += linearFactor
-        self.raw(r, g, b)
+    def extend_autorange(self, rgb):
+        if self.parameters["extend_autorange_method"] is "max":
+            for i in range(3):
+                self.triples["min"][i] = min(self.triples["min"][i], rgb[i])
+                self.triples["max"][i] = max(self.triples["max"][i], rgb[i]) + 0.000001
+        elif self.parameters["extend_autorange_method"] is "linear": 
+            for i in range(3):
+                self.triples["min"][i] += (rgb[i] - self.triples["min"][i]) * self.parameters["range_extend_linear"] if self.triples["min"][i] > rgb[i] else 0
+                self.triples["max"][i] += (rgb[i] - self.triples["max"][i]) * self.parameters["range_extend_linear"] if self.triples["max"][i] < rgb[i] else 0
+        return rgb
 
-    def percentAutorange(self, r, g, b):
-        percent = 0.0006
+
+    def narrow_autorange(self, rgb):
         for i in range(3):
-            self.triples["max"][i] *= (1 - percent)
-            self.triples["min"][i] *= (1 + percent)
-        self.raw(r, g, b)
+            d = self.triples["max"][i] - self.triples["min"][i]
+            self.triples["max"][i] -= self.parameters["range_narrow_linear"] * d
+            self.triples["max"][i] -= self.parameters["range_narrow_constant"]
+            self.triples["min"][i] += self.parameters["range_narrow_linear"] * d
+            self.triples["min"][i] += self.parameters["range_narrow_constant"]
+        return rgb
+
+    def post_process(self, rgb):
+        for i in range(3):
+            d = self.parameters["pp_minimal_difference"] - (self.triples["max"][i] - self.triples["min"][i])
+            if d > 0:
+                w = self.parameters["pp_minimal_difference_weight"]
+                self.triples["min"][i] -= d * w
+                self.triples["max"][i] += d * (1 - w) 
+
+
+
+    def nextColor(self):
+        if self.parameters["next_color_method"] is "random":
+            return self.randomColor()
+        elif self.parameters["next_color_method"] is "step":
+            return self.stepColor()
+
 
     def randomColor(self):
         return colorsys.hsv_to_rgb(random.random(), 1, 1)
     
-    def nextColor(self):
-        self.colorswitch = 0 if self.colorswitch >= 5/6 - 0.00001 else self.colorswitch + 1/6
+    def stepColor(self):
+        self.colorswitch = 0 \
+                if self.colorswitch >= 1 - (self.parameters["next_color_step"] + 0.0000001) else \
+                self.colorswitch + self.parameters["next_color_step"]
         return colorsys.hsv_to_rgb(self.colorswitch, 1, 1)
     
-    def changeWithChannel(self, r, g, b):
-        self._limitmethod(r, g, b)
-        self.writeValues()
-        if (os.times()[4] - self.lastchange) < self.cooldown:
-            self.rgb = self.lastcolor
-            return
+    def changeWithChannel(self, rgb):
+        if (os.times()[4] - self.lastchange) < self.parameters["colorchange_cooldown"]:
+            return self.lastcolor
         self.lastchange = os.times()[4]
 
         for channels, threshold in self.channelthreshold:
-            if (sum([self.rgb[i] for i in channels]) > (threshold * (len(channels)))):
-                self.rgb = self._colormethod()
-                self.lastcolor = self.rgb
-                return
-        self.rgb = self.lastcolor
+            if (sum([rgb[i] for i in channels]) > (threshold * (len(channels)))):
+                self.lastcolor = self.nextColor()
+                return self.lastcolor
+        return self.lastcolor
 
 
     def controlString(self, s):
@@ -173,12 +211,13 @@ class Piylights:
             quit()
             #todo make this work
 
-    def writeValues(self):
+    def writeValues(self, rgb):
         limit = 30
-        scaled = list(map(lambda x: int(x * limit), self.rgb))
+        scaled = list(map(lambda x: int(x * limit), rgb))
         for i in range(3):
             print(str(int(self.triples["min"][i])) + "][" + scaled[i] * "=" + (limit-scaled[i]) * " " + "][" + str(int(self.triples["max"][i])))
         print("\n")
+        return rgb
 
 
 def client(ip, port, message):
