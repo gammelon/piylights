@@ -111,7 +111,7 @@ class Piylights:
                 "extend_autorange_method" : "max", # "max", "linear"\
                 "next_color_method" : "step",\
                 "pp_minimal_difference" : 4.0,\
-                "pp_minimal_difference_weight" : .5,\
+                "pp_minimal_difference_weight" : .42,\
                 }
         self.lastchange = os.times()[4]
         self.lastcolor = (1, 0, 0)
@@ -152,18 +152,18 @@ class Piylights:
                 self.triples["max"][i] = max(self.triples["max"][i], rgb[i]) + 0.000001
         elif self.parameters["extend_autorange_method"] is "linear": 
             for i in range(3):
-                self.triples["min"][i] += (rgb[i] - self.triples["min"][i]) * self.parameters["range_extend_linear"] if self.triples["min"][i] > rgb[i] else 0
-                self.triples["max"][i] += (rgb[i] - self.triples["max"][i]) * self.parameters["range_extend_linear"] if self.triples["max"][i] < rgb[i] else 0
+                self.triples["min"][i] += (rgb[i] - self.triples["min"][i]) * self.parameters["range_extend_linear"] * self.updatesPerSecond if self.triples["min"][i] > rgb[i] else 0
+                self.triples["max"][i] += (rgb[i] - self.triples["max"][i]) * self.parameters["range_extend_linear"] *self.updatesPerSecond if self.triples["max"][i] < rgb[i] else 0
         return rgb
 
 
     def narrow_autorange(self, rgb):
         for i in range(3):
             d = self.triples["max"][i] - self.triples["min"][i]
-            self.triples["max"][i] -= self.parameters["range_narrow_linear"] * d
-            self.triples["max"][i] -= self.parameters["range_narrow_constant"]
-            self.triples["min"][i] += self.parameters["range_narrow_linear"] * d
-            self.triples["min"][i] += self.parameters["range_narrow_constant"]
+            self.triples["max"][i] -= self.parameters["range_narrow_linear"] * d * self.updatesPerSecond
+            self.triples["max"][i] -= self.parameters["range_narrow_constant"] * self.updatesPerSecond
+            self.triples["min"][i] += self.parameters["range_narrow_linear"] * d * self.updatesPerSecond
+            self.triples["min"][i] += self.parameters["range_narrow_constant"] * self.updatesPerSecond
         return rgb
 
     def post_process(self, rgb):
@@ -171,8 +171,8 @@ class Piylights:
             d = self.parameters["pp_minimal_difference"] - (self.triples["max"][i] - self.triples["min"][i])
             if d > 0:
                 w = self.parameters["pp_minimal_difference_weight"]
-                self.triples["min"][i] -= d * w
-                self.triples["max"][i] += d * (1 - w) 
+                self.triples["min"][i] -= d * w * self.updatesPerSecond
+                self.triples["max"][i] += d * (1 - w) * self.updatesPerSecond
 
 
 
