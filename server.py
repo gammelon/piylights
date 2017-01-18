@@ -2,7 +2,8 @@
 import os
 import random
 RASPI = False
-if "arm" in os.uname():
+OUTPUT = False
+if "arm" in os.uname()[4]:
     RASPI = True
 if RASPI:
     import RPi.GPIO as gp 
@@ -112,13 +113,27 @@ class Piylights:
                 "next_color_method" : "step",\
                 "pp_minimal_difference" : 4.0,\
                 "pp_minimal_difference_weight" : .42,\
+                "led_channels" : [12, 16, 18, 22],\
                 }
         self.lastchange = os.times()[4]
         self.lastcolor = (1, 0, 0)
-        #self.channelthreshold = [ ( [0], 0.7 ), ( [1], 0.75 ), ( [2], 0.75), ( [0, 1, 2], 0.65 ) ] #0 bass 1 mid 2 treble
-        self.channelthreshold = [ ( [0], 0.65 ) ] #0 bass 1 mid 2 treble
+        self.channelthreshold = [ ( [0], 0.7 ), ( [1], 0.75 ), ( [2], 0.75), ( [0, 1, 2], 0.65 ) ] #0 bass 1 mid 2 treble
+        #self.channelthreshold = [ ( [0], 0.65 ) ] #0 bass 1 mid 2 treble
         self.triples = {"min" : [0] * 3, "max" : [10] * 3}
         self.colorswitch = 0 
+        frequency = 90
+        if RASPI:
+            print("detected raspi")
+            gp.setmode(gp.BOARD)
+            gp.setwarnings(False)
+            gp.setup(self.parameters["led_channels"], gp.OUT)
+            gp.output(self.parameters["led_channels"][0], gp.LOW)
+            self.red = gp.PWM(self.parameters["led_channels"][1],frequency)
+            self.green = gp.PWM(self.parameters["led_channels"][2],frequency)
+            self.blue = gp.PWM(self.parameters["led_channels"][3],frequency)
+            self.red.start(0)
+            self.green.start(0)
+            self.blue.start(0)
         self._livefft = self.Livefft(self)
         self.updatesPerSecond = self._livefft.interval_s * 60
         self._server = self.ThreadedUDPServer(("localhost", port), self.UDPHandler)
@@ -127,6 +142,7 @@ class Piylights:
         server_thread.daemon = True
         server_thread.start()
 
+
     def update(self, rgb):
         if not self.parameters["active"]:
             writeValues([0,0,0])
@@ -134,8 +150,9 @@ class Piylights:
         self.narrow_autorange(rgb)
         self.extend_autorange(rgb)
         self.post_process(rgb)
-        processed = self.writeValues(self.raw(rgb))
-        self.writeValues(self._method(processed))
+        #processed = self.writeValues(self.raw(rgb))
+        self.writeValues(self._method(self.raw(rgb)))
+        #self.writeValues(self.raw(rgb))
 
     def raw(self, rgb):
         for i in range(3):
@@ -212,11 +229,16 @@ class Piylights:
             #todo make this work
 
     def writeValues(self, rgb):
-        limit = 30
-        scaled = list(map(lambda x: int(x * limit), rgb))
-        for i in range(3):
-            print(str(int(self.triples["min"][i])) + "][" + scaled[i] * "=" + (limit-scaled[i]) * " " + "][" + str(int(self.triples["max"][i])))
-        print("\n")
+        if RASPI:
+            self.red.ChangeDutyCycle(rgb[0]*100)
+            self.green.ChangeDutyCycle(rgb[1]*100)
+            self.blue.ChangeDutyCycle(rgb[2]*100)
+        if OUTPUT:
+            limit = 30
+            scaled = list(map(lambda x: int(x * limit), rgb))
+            for i in range(3):
+                print(str(int(self.triples["min"][i])) + "][" + scaled[i] * "=" + (limit-scaled[i]) * " " + "][" + str(int(self.triples["max"][i])))
+            print("\n")
         return rgb
 
 
