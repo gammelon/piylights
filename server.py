@@ -2,92 +2,24 @@
 import os
 import random
 RASPI = False
-OUTPUT = False
+OUTPUT = True
+OUTPUT_RAW = True
 if "arm" in os.uname()[4]:
     RASPI = True
+    OUTPUT = False
+    OUTPUT_RAW = False
 if RASPI:
     import RPi.GPIO as gp 
 import time
 import socket
 import socketserver as SocketServer
-import sys
 import threading
-import numpy as np
-from numpy import nonzero, diff
-from recorder import SoundCardDataSource
-import threading
+import math
 import time
 import colorsys
+from livefft import Livefft
 
 class Piylights:
-
-    class Livefft:
-
-        class LiveFFTWindow(threading.Thread):
-
-            def __init__(self, recorder, piylights):
-                super().__init__()
-                self.recorder = recorder
-                self._piylights = piylights
-                self.timeValues = self.recorder.timeValues
-                self.interval_s = (self.recorder.chunk_size / self.recorder.fs)
-
-            def fft_buffer(self, x):
-                window = np.hanning(x.shape[0])
-
-                # Calculate FFT
-                fx = np.fft.rfft(window * x)
-
-                # Convert to normalised PSD
-                Pxx = abs(fx)**2 / (np.abs(window)**2).sum()
-
-                # Scale for one-sided (excluding DC and Nyquist frequencies)
-                Pxx[1:-1] *= 2
-
-                # And scale by frequency to get a result in (dB/Hz)
-                # Pxx /= Fs
-                return Pxx ** 0.5
-
-            def run(self):
-                print ("Updating graphs every %.1f ms" % (self.interval_s*1000))
-                while(True):
-                    time.sleep(self.interval_s)
-                    self.update()
-
-            def update(self):
-                data = self.recorder.get_buffer()
-                weighting = np.exp(self.timeValues / self.timeValues[-1])
-                Pxx = self.fft_buffer(weighting * data[:, 0])
-                Pxx = np.log10(Pxx + 1)*20
-                self.length = int(len(Pxx) / 1)
-                pA, pB, pC = 0, 0, 0
-                bass = self._piylights.parameters["upper_limit_bass"]
-                mid = self._piylights.parameters["upper_limit_mid"]
-                #print(int(round(bass * self.length)))
-                #print(int(round(mid * self.length)))
-                for element in Pxx[0: int(round(bass * self.length))]:
-                    pA+=element
-                for element in Pxx[int(round(bass * self.length)): int(round(mid * self.length))]:
-                    pB+=element
-                for element in Pxx[int(round(mid * self.length)): self.length]:
-                    pC+=element
-                self._piylights.update([pA, pB, pC])
-
-                ##print(str(round(pA)) + "   #   " + str(round(pB)) + "   #   " + str(round(pC)))
-
-
-        def __init__(self, piylights):
-            # Setup recorder
-            FS = 44100
-            recorder = SoundCardDataSource(num_chunks=1, sampling_rate=FS, chunk_size=768)
-            #WHAT tweak chunk size to make this shit faster
-
-            win = self.LiveFFTWindow(recorder, piylights)
-            self.interval_s = win.interval_s
-            win.daemon = True
-            win.start()
-
-
 
     class ThreadedUDPServer(SocketServer.ThreadingMixIn, SocketServer.UDPServer):
         pass
@@ -114,13 +46,14 @@ class Piylights:
                 "pp_minimal_difference" : 4.0,\
                 "pp_minimal_difference_weight" : .42,\
                 "led_channels" : [12, 16, 18, 22],\
+                "preprocess_function" : lambda x: math.log(x + 1),\
                 }
         self.lastchange = os.times()[4]
         self.lastcolor = (1, 0, 0)
         self.channelthreshold = [ ( [0], 0.7 ), ( [1], 0.75 ), ( [2], 0.75), ( [0, 1, 2], 0.65 ) ] #0 bass 1 mid 2 treble
         #self.channelthreshold = [ ( [0], 0.65 ) ] #0 bass 1 mid 2 treble
         self.triples = {"min" : [0] * 3, "max" : [10] * 3}
-        self.colorswitch = 0 
+        self.colorswitch = 0
         frequency = 90
         if RASPI:
             print("detected raspi")
@@ -128,13 +61,12 @@ class Piylights:
             gp.setwarnings(False)
             gp.setup(self.parameters["led_channels"], gp.OUT)
             gp.output(self.parameters["led_channels"][0], gp.LOW)
-            self.red = gp.PWM(self.parameters["led_channels"][1],frequency)
-            self.green = gp.PWM(self.parameters["led_channels"][2],frequency)
-            self.blue = gp.PWM(self.parameters["led_channels"][3],frequency)
-            self.red.start(0)
-            self.green.start(0)
-            self.blue.start(0)
-        self._livefft = self.Livefft(self)
+            self.rpiOut = [gp.PWM(self.parameters["led_channels"][1],frequency), \
+                    gp.PWM(self.parameters["led_channels"][2],frequency), \
+                    gp.PWM(self.parameters["led_channels"][3],frequency)]
+            for x in self.rpiOut:
+                x.start(0)
+        self._livefft = Livefft(self)
         self.updatesPerSecond = self._livefft.interval_s * 60
         self._server = self.ThreadedUDPServer(("localhost", port), self.UDPHandler)
         self._server.piylights = self
@@ -147,12 +79,16 @@ class Piylights:
         if not self.parameters["active"]:
             writeValues([0,0,0])
             return
+        rgb = list(map(self.parameters["preprocess_function"], rgb))
+
         self.narrow_autorange(rgb)
         self.extend_autorange(rgb)
         self.post_process(rgb)
-        #processed = self.writeValues(self.raw(rgb))
-        self.writeValues(self._method(self.raw(rgb)))
-        #self.writeValues(self.raw(rgb))
+        raw = self.raw(rgb)
+        processed = self._method(raw)
+        if OUTPUT_RAW:
+            self.writeValues(raw)
+        self.writeValues(processed)
 
     def raw(self, rgb):
         for i in range(3):
@@ -230,9 +166,8 @@ class Piylights:
 
     def writeValues(self, rgb):
         if RASPI:
-            self.red.ChangeDutyCycle(rgb[0]*100)
-            self.green.ChangeDutyCycle(rgb[1]*100)
-            self.blue.ChangeDutyCycle(rgb[2]*100)
+            for x in range(3):
+                self.rpiOut[x].ChangeDutyCycle(rgb[x]*100)
         if OUTPUT:
             limit = 30
             scaled = list(map(lambda x: int(x * limit), rgb))
