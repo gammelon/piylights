@@ -13,6 +13,10 @@ class Livefft:
             self._piylights = piylights
             self.timeValues = self.recorder.timeValues
             self.interval_s = (self.recorder.chunk_size / self.recorder.fs)
+            self.shutdown = False
+
+        def kill(self):
+            self.shutdown = True
 
         def fft_buffer(self, x):
             window = np.hanning(x.shape[0])
@@ -33,15 +37,20 @@ class Livefft:
         def run(self):
             print ("Updating graphs every %.1f ms" % (self.interval_s*1000))
             while(True):
+                if self.shutdown:
+                    return
                 time.sleep(self.interval_s)
+                start = time.time()
                 self.update()
+                end = time.time()
+                #print(1000 * (end - start))
 
         def update(self):
             data = self.recorder.get_buffer()
             weighting = np.exp(self.timeValues / self.timeValues[-1])
             Pxx = self.fft_buffer(weighting * data[:, 0])
             Pxx = np.log10(Pxx + 1)*20
-            self.length = int(len(Pxx) / 1)
+            self.length = len(Pxx)
             bands = [0, 0, 0]
             bass = int(round( self.length * self._piylights.parameters["upper_limit_bass"]))
             mid = int(round(self.length * self._piylights.parameters["upper_limit_mid"]))
@@ -57,8 +66,9 @@ class Livefft:
         FS = 44100
         recorder = SoundCardDataSource(num_chunks=1, sampling_rate=FS, chunk_size=441)
         #chunk size set for updates every 10ms
+        #better keep this fixed now...
 
-        win = self.LiveFFTWindow(recorder, piylights)
-        self.interval_s = win.interval_s
-        win.daemon = True
-        win.start()
+        self.win = self.LiveFFTWindow(recorder, piylights)
+        self.interval_s = self.win.interval_s
+        self.win.daemon = True
+        self.win.start()
