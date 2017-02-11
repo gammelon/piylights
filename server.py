@@ -48,17 +48,18 @@ class Piylights:
                 "range_extend_linear" : .4,\
                 "range_narrow_linear" : .005,\
                 "extend_autorange_method" : "max", # "max", "linear"\
-                "pp_minimal_difference" : 2.5,\
-                "pp_minimal_difference_weight" : .42,\
+                "pp_minimal_difference" : [2.5, 2.5, 2.5],\
                 # parameters to configure methods etc...\
-                "active_method" : "change_with_channel",\
+                "active_method" : "change_with_channel_step",\
+                "active_method" : "raw",\
                 "colorchange_cooldown" : .1,\
                 "next_color_step" : 1/6.0,\
-                "next_color_method" : "step",\
+                "global_offset_percent" : [.25, .25, .25],\
                 }
         self.methods = {
                 "raw" : lambda x: x, \
-                "change_with_channel" : self.changeWithChannel, \
+                "change_with_channel_step" : self.changeWithChannelStep, \
+                "change_with_channel_random" : self.changeWithChannelRandom, \
                 #"change_with_time" : self.changeWithTime, \
                 #"single_color" : self.singleColor, \
                 }
@@ -114,6 +115,7 @@ class Piylights:
             res[i] = (rgb[i] - self.triples["min"][i]) \
                     / (self.triples["max"][i] - self.triples["min"][i])
             res[i] = 0 if res[i] < 0 else res[i]
+            res[i] = 0 if res[i] < self.parameters["global_offset_percent"][i] * (self.triples["max"][i] - self.triples["min"][i]) else res[i]
             res[i] = 1 if res[i] > 1 else res[i]
         return res
 
@@ -140,39 +142,49 @@ class Piylights:
 
     def post_process(self, rgb):
         for i in range(3):
-            d = self.parameters["pp_minimal_difference"] - (self.triples["max"][i] - self.triples["min"][i])
+            d = self.parameters["pp_minimal_difference"][i] - (self.triples["max"][i] - self.triples["min"][i])
             if d > 0:
-                w = self.parameters["pp_minimal_difference_weight"]
-                self.triples["min"][i] -= d * w * self.updatesPerSecond
-                self.triples["max"][i] += d * (1 - w) * self.updatesPerSecond
-
-    def nextColor(self):
-        if self.parameters["next_color_method"] is "random":
-            return self.randomColor()
-        elif self.parameters["next_color_method"] is "step":
-            return self.stepColor()
+                self.triples["max"][i] += d * self.updatesPerSecond
 
     def randomColor(self):
         return colorsys.hsv_to_rgb(random.random(), 1, 1)
     
-    def stepColor(self):
+    def stepColor(self, step):
         self.colorswitch = 0 \
-                if self.colorswitch >= 1 - (self.parameters["next_color_step"] + 0.0000001) else \
-                self.colorswitch + self.parameters["next_color_step"]
+                if self.colorswitch >= 1 - (step + 0.0000001) else \
+                self.colorswitch + step
         return colorsys.hsv_to_rgb(self.colorswitch, 1, 1)
 
-    def changeWithChannel(self, rgb):
+    def changeWithChannelRandom(self, rgb):
+        if self._changeColorCheck(self, rgb):
+            self.lastcolor = self.randomColor()
+        return self.lastcolor
+    
+    def changeWithChannelStep(self, rgb):
+        if self._changeColorCheck(rgb):
+            self.lastcolor = self.stepColor(self.parameters["next_color_step"])
+        return self.lastcolor
+
+    def _changeColorCheck(self, rgb):
         if (os.times()[4] - self.lastchange) < self.parameters["colorchange_cooldown"]:
-            return self.lastcolor
+            return False
         self.lastchange = os.times()[4]
 
         for channels, threshold in self.channelthreshold:
             if (sum([rgb[i] for i in channels]) > (threshold * (len(channels)))):
-                self.lastcolor = self.nextColor()
-                return self.lastcolor
-        return self.lastcolor
+                return True
+        return False
     
-    #def changeWithTime(self):
+    def changeWithTime(self, startColor, endColor, percentage):
+        res=[0,0,0]
+        for i in range(3):
+            res[i] += startColor[i] + percentage * (endColor[i] - startColor[i])
+        return res
+
+    #def setStrobeParam(self, frequency, dutyCycle):
+
+    def resetStrobe(self):
+        self.setStrobeParam(80, 1)
 
     def writeValues(self, rgb):
         if RASPI:
