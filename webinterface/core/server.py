@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-import os
+import os, sys, inspect
+
 import random
 from parser import Parser
+from tcpcontroller import TCPController
 RASPI = False
-OUTPUT = True
+OUTPUT = False
 OUTPUT_RAW = True
 if "arm" in os.uname()[4]:
     RASPI = True
@@ -13,8 +15,6 @@ if "arm" in os.uname()[4]:
 if RASPI:
     import RPi.GPIO as gp 
 import time
-import socket
-import socketserver
 import threading
 import math
 import time
@@ -23,25 +23,48 @@ from livefft import Livefft
 
 class Piylights:
 
-    class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
-        pass
+    def controlStringHelp(self, s):
+        ret = "commands:\n"
+        for key in self.commands.keys():
+            ret += self.commands[key][0] + "\n"
+        return ret
 
-    class RequestHandler(socketserver.BaseRequestHandler):
-        def handle(self):
-            print("new connection from: " + str(self.client_address[0]))
-            while True:
-                self.data = self.request.recv(2048)
-                if not self.data:
-                    break
-                self.data = str(self.data.strip(),'utf-8')
-                ret = bytes(self.server.piylights.controlString(self.data), "utf-8")
-                if ret != None:
-                    self.request.sendall(ret)
+    def controlStringGetparam(self, s):
+        ret = "parameters:\n___________\n"
+        for key in self.parameters.keys():
+            ret += key + " : " + str(self.parameters[key]) + "\n"
+        return ret
 
-    def __init__(self, port):
+    def controlStringGetlimit(self, s):
+        ret = "limits:\n___________\n"
+        for key in self.limits.keys():
+            ret += key + " : " + str(self.limits[key]) + "\n"
+        return ret
+
+    def controlStringShutdown(self, s):
+        return self.shutdown()
+
+    def setParam(self, p, key):
+        if p in list(self.parameters.keys()):
+            if type(key) == type(self.parameters[p]):
+                self.parameters[p] = key
+                return True
+        else:
+            return False
+
+    def controlStringSetparam(self, s):
+        if len(s) < 3:
+            return "not enough arguments"
+        res = self.setParam(s[1], s[2])
+        if res:
+            return "SUCCESS: changed parameter " + p
+        else:
+            return "FAILURE: parameter " + p + " not present in configuration"
+
+    def __init__(self):
+        self.port = 12345
         self.parameters = { # parameters to process input
                 "active" : "True",\
-                "led_channels" : [12, 16, 18, 22],\
                 "upper_limit_bass" : 1/100.0,\
                 "upper_limit_mid" : 1/10.0,\
                 "range_narrow_constant" : .000,\
@@ -56,6 +79,7 @@ class Piylights:
                 "next_color_step" : 1/6.0,\
                 "global_offset_percent" : [.25, .25, .25],\
                 }
+
         self.methods = {
                 "raw" : lambda x: x, \
                 "change_with_channel_step" : self.changeWithChannelStep, \
@@ -63,9 +87,40 @@ class Piylights:
                 #"change_with_time" : self.changeWithTime, \
                 #"single_color" : self.singleColor, \
                 }
+
+        self.limits = {
+                "active" : ["True", "False"],\
+                "upper_limit_bass" : [0, 1],\
+                "upper_limit_mid" : [0, 1],\
+                "range_narrow_constant" : [0, 10],\
+                "range_extend_linear" : [0, 10],\
+                "range_narrow_linear" : [0, 40],\
+                "extend_autorange_method" : ["max", "linear"],\
+                "pp_minimal_difference" : [0, 20],\
+                # parameters to configure methods etc...\
+                "active_method" : list(self.methods.keys()),\
+                "colorchange_cooldown" : [0, 10],\
+                "next_color_step" : [0, 1],\
+                "global_offset_percent" : [0, 1],\
+                }
+
+        self.commands = {
+                "help" : ("help - show help",\
+                        self.controlStringHelp),\
+                "setparam" : ("setparam [name] [value] - set value of parameter",\
+                        self.controlStringSetparam),\
+                "getparam" : ("getparam - get names and values of all parameters",\
+                        self.controlStringGetparam),\
+                "getlimit" : ("getlimit - get limits or possible values for each parameter",\
+                        self.controlStringGetlimit),\
+                "shutdown" : ("shutdown - stop piylights",\
+                        self.controlStringShutdown),\
+                }
+
         self.preprocess_function = lambda x: math.log(x + 1) #logarithmic scale
         #self.preprocess_function = lambda x: x #linear
 
+        led_channels = [12, 16, 18, 22]
 
         self.lastchange = os.times()[4]
         self.lastcolor = (1, 0, 0)
@@ -78,20 +133,17 @@ class Piylights:
             print("detected raspi")
             gp.setmode(gp.BOARD)
             gp.setwarnings(False)
-            gp.setup(self.parameters["led_channels"], gp.OUT)
-            gp.output(self.parameters["led_channels"][0], gp.LOW)
-            self.rpiOut = [gp.PWM(self.parameters["led_channels"][1],frequency), \
-                    gp.PWM(self.parameters["led_channels"][2],frequency), \
-                    gp.PWM(self.parameters["led_channels"][3],frequency)]
+            gp.setup(led_channels, gp.OUT)
+            gp.output(led_channels[0], gp.LOW)
+            self.rpiOut = [
+                    gp.PWM(led_channels[1],frequency), \
+                    gp.PWM(led_channels[2],frequency), \
+                    gp.PWM(led_channels[3],frequency)]
             for x in self.rpiOut:
                 x.start(0)
         self._livefft = Livefft(self)
         self.updatesPerSecond = self._livefft.interval_s * 60
-        self._server = self.ThreadedTCPServer(("localhost", port), self.RequestHandler)
-        self._server.piylights = self
-        server_thread = threading.Thread(target=self._server.serve_forever)
-        server_thread.daemon = True
-        server_thread.start()
+        tcp_controller = TCPController(self.port, self)
 
     def update(self, rgb):
         if self.parameters["active"] not in ["True", "true", "TRUE", "1", "+"]:
@@ -201,52 +253,25 @@ class Piylights:
             print("\n")
         return rgb
 
-    def is_number(self, s):
-        try:
-            float(s)
-            return True
-        except ValueError:
-            return False
-
     def controlString(self, s):
         s = Parser.parse(s)
         if len(s) < 1:
             return
-        if s[0] == "setparam":
-            if len(s) < 3:
-                return
-            if s[1] in list(self.parameters.keys()):
-                if type(s[2]) == type(self.parameters[s[1]]):
-                    self.parameters[s[1]] = s[2]
-                    return "changed parameter"
-        elif s[0] == "help":
-            return "commands:\n" + \
-                    "help - show help\n" + \
-                    "getparam - get names and values of all parameters\n" + \
-                    "setparam [name] [value] - set value of parameter\n" + \
-                    "shutdown - stop piylights"
-        elif s[0] == "getparam":
-            print("getparam")
-            s = "parameters:\n___________\n"
-            for key in self.parameters.keys():
-                s += key + " : " + str(self.parameters[key]) + "\n"
-            return s
-        elif s[0] == "shutdown":
-            print("quits called")
-            shutdown()
-            return
+        for key in list(self.commands):
+            if s[0] == key:
+                return self.commands[key][1](s)
         return "command not recognized"
 
-def shutdown():
-    _piylights._server.socket.shutdown(socket.SHUT_RDWR)
-    _piylights._server.socket.close()
-    _piylights._server.server_close()
-    _piylights._livefft.win.kill()
-    print("graceful shutdown")
-    quit()
+    def shutdown():
+        _server.socket.shutdown(socket.SHUT_RDWR)
+        _server.socket.close()
+        _server.server_close()
+        _livefft.win.kill()
+        print("graceful shutdown")
+        quit()
 
 if __name__ == "__main__":
-    _piylights = Piylights(12345)
-    while True:
+    _piylights = Piylights()
+    while(True):
         time.sleep(10)
-    #shutdown()
+

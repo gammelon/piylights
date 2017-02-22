@@ -2,12 +2,21 @@ import string
 
 class Parser:
     @staticmethod
-    def is_number(s):
+    def _is_number(s):
         try:
             float(s)
             return True
         except ValueError:
             return False
+
+    @staticmethod
+    def parse_single(s):
+        if s is "":
+            return None
+        if Parser._is_number(s):
+            return float(s)
+        else:
+            return s
 
     @staticmethod
     def parse(s):
@@ -18,30 +27,30 @@ class Parser:
         parts = s.split(" ")
         l = []
         for element in parts:
-            l.append(Parser.parseRecursive(element))
+            l.append(Parser._parseRecursive(element))
         return l
 
     @staticmethod
-    def parseRecursive(s):
+    def _parseRecursive(s):
         if s is "":
             return None
-        if Parser.is_number(s):
+        if Parser._is_number(s):
             return float(s)
         elif s[0] is "[":
-            return Parser.parseList(s)
+            return Parser._parseList(s)
         else:
             return s
 
     @staticmethod
-    def parseList(s):
-        parts = Parser.splitList(s)
+    def _parseList(s):
+        parts = Parser._splitList(s)
         parsed = []
         for element in parts:
-            parsed.append(Parser.parseRecursive(element))
+            parsed.append(Parser._parseRecursive(element))
         return parsed
 
     @staticmethod
-    def splitList(s):
+    def _splitList(s):
         parts = []
         count = 0
         lastindex = 1

@@ -1,0 +1,17 @@
+<html>
+	<head>
+		<title>{{ title }}</title>
+<style>
+th {
+	text-align: left;
+}
+th, td {
+	padding: 5px;
+}
+</style>
+	</head>
+	<body>
+		<center><h1>{{ title }}</h1></center>
+		{% block content %}{% endblock %}
+	</body>
+</html>
