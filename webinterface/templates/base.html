@@ -1,17 +1,26 @@
-<html>
+<!DOCTYPE html>
+<html ng-app="angular_frontend">
 	<head>
 		<title>{{ title }}</title>
-<style>
-th {
-	text-align: left;
-}
-th, td {
-	padding: 5px;
-}
-</style>
+		<script src='static/js/angular.js'></script>
+		<script src='static/js/angular-resource.js'></script>
+		<!--<script src='static/js/bootstrap.min.js'></script>-->
+		<script src='static/js/frontend.js'></script>
+		<style>
+		th {text-align: left;}
+		th, td {padding: 5px;}
+		</style>
+		<link id='apiPath' href='/api/' />
 	</head>
 	<body>
 		<center><h1>{{ title }}</h1></center>
+		<div ng-controller='frontend_controller'>
+			<p>{a itest.result a}</p>
+		</div>
 		{% block content %}{% endblock %}
+			<!--<p>Name: <input type='text' ng-model='name' ng-change='test()'></p>
+			<input type='text' ng-model='test()' value='{{ result }}'/>
+			<p ng-bind='name', ng-change='test()'></p>
+			<p>Expression test: {{ 5 / 4 }} </p>-->
 	</body>
 </html>
