@@ -72,30 +72,30 @@ class Piylights:
                 }
         self.parameters = { # parameters to process input
                 "active" : \
-                    {"value":"True", "limit" : ["True", "False"], "description":"" },\
+                    {"value":"True", "limit" : ["True", "False"], "description":"global switch" },\
                 "upper_limit_bass" : \
-                    {"value": 1/100, "limit": [0,1], "description" : "" },\
+                    {"value": 1/100, "limit": [0,1], "description" : "percentage in frequency range where bass stops and mids begin" },\
                 "upper_limit_mid" : \
-                    {"value": 1/10 , "limit": [0,1], "description" : "" },\
+                    {"value": 1/10 , "limit": [0,1], "description" : "percentage in frequency range where mids stop and treble begins" },\
                 "range_narrow_constant" : \
-                    {"value": .000, "limit": [0,10], "description" : "" },\
+                    {"value": .000, "limit": [0,10], "description" : "the dynamic range is narrowed each tick by this constant" },\
                 "range_extend_linear" : \
-                    {"value": .4, "limit": [0,10],"description" : "" },\
+                    {"value": .4, "limit": [0,10],"description" : "the dynamic range is widened by this percentage each tick if the loudness exceeds the current dynamic range" },\
                 "range_narrow_linear" : \
-                    {"value": .005, "limit": [0,40], "description" : "" },\
+                    {"value": .005, "limit": [0,40], "description" : "the dynamic range is narrowed by this percentage if the loudness is in the dynamic range" },\
                 "extend_autorange_method" : \
-                    {"value": "max", "limit": ["max", "linear"] , "description" : "" },\
+                {"value": "max", "limit": ["max", "linear"] , "description" : "max: dynamic range is always max(dynamic_range, current_loudness); linear: only extend by percentage (see other values *_linear)" },\
                 "pp_minimal_difference" : \
-                    {"value": [2.5, 2.5, 2.5], "limit": [0,100], "description" : "" },\
+                    {"value": [2.5, 2.5, 2.5], "limit": [0,100], "description" : "minimal wideness of dynamic range for each channel" },\
                 # parameters to configure methods etc...\
                 "active_method" : \
-                    {"value": "change_with_channel_step", "limit": list(self.methods.keys()), "description" : "" },\
+                    {"value": "change_with_channel_step", "limit": list(self.methods.keys()), "description" : "method to use for color production" },\
                 "colorchange_cooldown" : \
-                    {"value": .1, "limit": [0,10], "description" : "" },\
+                    {"value": .1, "limit": [0,10], "description" : "used with change_with_channel_step, minimal time between two changes" },\
                 "next_color_step" : \
-                    {"value": 1/6, "limit": [0,1], "description" : "" },\
+                    {"value": 1/6, "limit": [0,1], "description" : "size of the color step 0=1=do nothing" },\
                 "global_offset_percent" : \
-                    {"value": [.25, .25, .25], "limit": [0,1], "description" : "" },\
+                    {"value": [.25, .25, .25], "limit": [0,1], "description" : "loudness needs to cross this percentage to be considered for color production" },\
                 }
 
         self.commands = {

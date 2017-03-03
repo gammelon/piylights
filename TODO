@@ -1,8 +1,22 @@
-introduce second parameter list that contains min/max values or possible choices for strings
-display limits in webinterface
 automatic form generation
-communication between server and webinterface over tcp
 load/store parameters/limits on start/shutdown
+preset support
+presets in webinterface (load, create, delete)
 save/load presets
 authentication for webinterface
+buttons for "fade to color"
 restructure { move fx to separate file, rename files according to code ^^)
+value copied to input field
+alert-thing if value not in limits
+
+
+
+support chains
+properties:
+chains loop over arrays of modes with settings
+e.g. strobe yellow for 100 ticks, then fade to blue, loop
+loop y/n
+tick multiplier(slower/faster)
+
+
+finally --> edit chains in webinterface
