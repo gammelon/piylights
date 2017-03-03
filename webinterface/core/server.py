@@ -32,13 +32,13 @@ class Piylights:
     def controlStringGetparam(self, s):
         ret = "parameters:\n___________\n"
         for key in self.parameters.keys():
-            ret += key + " : " + str(self.parameters[key]) + "\n"
+            ret += key + " : " + str(self.param[key]) + "\n"
         return ret
 
     def controlStringGetlimit(self, s):
         ret = "limits:\n___________\n"
         for key in self.limits.keys():
-            ret += key + " : " + str(self.limits[key]) + "\n"
+            ret += key + " : " + str(self.limit[key]) + "\n"
         return ret
 
     def controlStringShutdown(self, s):
@@ -63,23 +63,6 @@ class Piylights:
 
     def __init__(self):
         self.port = 12345
-        self.parameters = { # parameters to process input
-                "active" : "True",\
-                "upper_limit_bass" : 1/100.0,\
-                "upper_limit_mid" : 1/10.0,\
-                "range_narrow_constant" : .000,\
-                "range_extend_linear" : .4,\
-                "range_narrow_linear" : .005,\
-                "extend_autorange_method" : "max", # "max", "linear"\
-                "pp_minimal_difference" : [2.5, 2.5, 2.5],\
-                # parameters to configure methods etc...\
-                "active_method" : "change_with_channel_step",\
-                "active_method" : "raw",\
-                "colorchange_cooldown" : .1,\
-                "next_color_step" : 1/6.0,\
-                "global_offset_percent" : [.25, .25, .25],\
-                }
-
         self.methods = {
                 "raw" : lambda x: x, \
                 "change_with_channel_step" : self.changeWithChannelStep, \
@@ -87,21 +70,32 @@ class Piylights:
                 #"change_with_time" : self.changeWithTime, \
                 #"single_color" : self.singleColor, \
                 }
-
-        self.limits = {
-                "active" : ["True", "False"],\
-                "upper_limit_bass" : [0, 1],\
-                "upper_limit_mid" : [0, 1],\
-                "range_narrow_constant" : [0, 10],\
-                "range_extend_linear" : [0, 10],\
-                "range_narrow_linear" : [0, 40],\
-                "extend_autorange_method" : ["max", "linear"],\
-                "pp_minimal_difference" : [0, 20],\
+        self.parameters = { # parameters to process input
+                "active" : \
+                    {"value":"True", "limit" : ["True", "False"], "description":"" },\
+                "upper_limit_bass" : \
+                    {"value": 1/100, "limit": [0,1], "description" : "" },\
+                "upper_limit_mid" : \
+                    {"value": 1/10 , "limit": [0,1], "description" : "" },\
+                "range_narrow_constant" : \
+                    {"value": .000, "limit": [0,10], "description" : "" },\
+                "range_extend_linear" : \
+                    {"value": .4, "limit": [0,10],"description" : "" },\
+                "range_narrow_linear" : \
+                    {"value": .005, "limit": [0,40], "description" : "" },\
+                "extend_autorange_method" : \
+                    {"value": "max", "limit": ["max", "linear"] , "description" : "" },\
+                "pp_minimal_difference" : \
+                    {"value": [2.5, 2.5, 2.5], "limit": [0,100], "description" : "" },\
                 # parameters to configure methods etc...\
-                "active_method" : list(self.methods.keys()),\
-                "colorchange_cooldown" : [0, 10],\
-                "next_color_step" : [0, 1],\
-                "global_offset_percent" : [0, 1],\
+                "active_method" : \
+                    {"value": "change_with_channel_step", "limit": list(self.methods.keys()), "description" : "" },\
+                "colorchange_cooldown" : \
+                    {"value": .1, "limit": [0,10], "description" : "" },\
+                "next_color_step" : \
+                    {"value": 1/6, "limit": [0,1], "description" : "" },\
+                "global_offset_percent" : \
+                    {"value": [.25, .25, .25], "limit": [0,1], "description" : "" },\
                 }
 
         self.commands = {
@@ -145,8 +139,13 @@ class Piylights:
         self.updatesPerSecond = self._livefft.interval_s * 60
         tcp_controller = TCPController(self.port, self)
 
+    def param(self, name):
+        return self.parameters[name]["value"]
+    def limit(self, name):
+        return self.parameters[name]["limit"]
+
     def update(self, rgb):
-        if self.parameters["active"] not in ["True", "true", "TRUE", "1", "+"]:
+        if self.param("active") not in ["True", "true", "TRUE", "1", "+"]:
             self.writeValues([0,0,0])
             return
         rgb = list(map(self.preprocess_function, rgb))
@@ -155,7 +154,7 @@ class Piylights:
         self.extend_autorange(rgb)
         self.post_process(rgb)
         raw = self.raw(rgb)
-        processed = self.methods[self.parameters["active_method"]](raw)
+        processed = self.methods[self.param("active_method")](raw)
         if OUTPUT_RAW:
             self.printValues(raw)
         self.printValues(processed)
@@ -167,34 +166,34 @@ class Piylights:
             res[i] = (rgb[i] - self.triples["min"][i]) \
                     / (self.triples["max"][i] - self.triples["min"][i])
             res[i] = 0 if res[i] < 0 else res[i]
-            res[i] = 0 if res[i] < self.parameters["global_offset_percent"][i] * (self.triples["max"][i] - self.triples["min"][i]) else res[i]
+            res[i] = 0 if res[i] < self.param("global_offset_percent")[i] * (self.triples["max"][i] - self.triples["min"][i]) else res[i]
             res[i] = 1 if res[i] > 1 else res[i]
         return res
 
     def extend_autorange(self, rgb):
-        if self.parameters["extend_autorange_method"] is "max":
+        if self.param("extend_autorange_method") is "max":
             for i in range(3):
                 self.triples["min"][i] = min(self.triples["min"][i], rgb[i])
                 self.triples["max"][i] = max(self.triples["max"][i], rgb[i]) + 0.000001
-        elif self.parameters["extend_autorange_method"] is "linear": 
+        elif self.param("extend_autorange_method") is "linear": 
             for i in range(3):
-                self.triples["min"][i] += (rgb[i] - self.triples["min"][i]) * self.parameters["range_extend_linear"] * self.updatesPerSecond if self.triples["min"][i] > rgb[i] else 0
-                self.triples["max"][i] += (rgb[i] - self.triples["max"][i]) * self.parameters["range_extend_linear"] *self.updatesPerSecond if self.triples["max"][i] < rgb[i] else 0
+                self.triples["min"][i] += (rgb[i] - self.triples["min"][i]) * self.param("range_extend_linear") * self.updatesPerSecond if self.triples["min"][i] > rgb[i] else 0
+                self.triples["max"][i] += (rgb[i] - self.triples["max"][i]) * self.param("range_extend_linear") *self.updatesPerSecond if self.triples["max"][i] < rgb[i] else 0
         return rgb
 
 
     def narrow_autorange(self, rgb):
         for i in range(3):
             d = self.triples["max"][i] - self.triples["min"][i]
-            self.triples["max"][i] -= self.parameters["range_narrow_linear"] * d * self.updatesPerSecond
-            self.triples["max"][i] -= self.parameters["range_narrow_constant"] * self.updatesPerSecond
-            self.triples["min"][i] += self.parameters["range_narrow_linear"] * d * self.updatesPerSecond
-            self.triples["min"][i] += self.parameters["range_narrow_constant"] * self.updatesPerSecond
+            self.triples["max"][i] -= self.param("range_narrow_linear") * d * self.updatesPerSecond
+            self.triples["max"][i] -= self.param("range_narrow_constant") * self.updatesPerSecond
+            self.triples["min"][i] += self.param("range_narrow_linear") * d * self.updatesPerSecond
+            self.triples["min"][i] += self.param("range_narrow_constant") * self.updatesPerSecond
         return rgb
 
     def post_process(self, rgb):
         for i in range(3):
-            d = self.parameters["pp_minimal_difference"][i] - (self.triples["max"][i] - self.triples["min"][i])
+            d = self.param("pp_minimal_difference")[i] - (self.triples["max"][i] - self.triples["min"][i])
             if d > 0:
                 self.triples["max"][i] += d * self.updatesPerSecond
 
@@ -214,11 +213,11 @@ class Piylights:
     
     def changeWithChannelStep(self, rgb):
         if self._changeColorCheck(rgb):
-            self.lastcolor = self.stepColor(self.parameters["next_color_step"])
+            self.lastcolor = self.stepColor(self.param("next_color_step"))
         return self.lastcolor
 
     def _changeColorCheck(self, rgb):
-        if (os.times()[4] - self.lastchange) < self.parameters["colorchange_cooldown"]:
+        if (os.times()[4] - self.lastchange) < self.param("colorchange_cooldown"):
             return False
         self.lastchange = os.times()[4]
 

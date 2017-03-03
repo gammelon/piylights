@@ -12,23 +12,12 @@ def index():
 def getallparameters():
     return jsonify({"result" : {"parameters" : piylights.parameters}, "status" : "SUCCESS"})
 
-@app.route("/api/limits", methods=["GET"])
-def getalllimits():
-    return jsonify({"result" : {"limits" : piylights.limits}, "status" : "SUCCESS"} )
-
 @app.route("/api/parameters/<string:parameter>", methods=["GET"])
 def getparameter(parameter):
     if parameter in piylights.parameters:
         return jsonify({"result" : piylights.parameters[parameter], "status" : "SUCCESS"})
     else:
         return jsonify({"result" : "", "status" : "FAILURE", "error" : "parameter " + str(parameter) + " not present in configuration"})
-
-@app.route("/api/limits/<string:parameter>", methods=["GET"])
-def getlimit(parameter):
-    if parameter in piylights.limits:
-        return jsonify({"result" : piylights.limits[parameter], "status" : "SUCCESS"})
-    else:
-        return jsonify({"result" : "", "status" : "FAILURE", "error" : "parameter " + str(parameter) + " not present in limit db"})
 
 @app.route("/api/parameters/<string:parameter>", methods=["PUT"])
 def setparameter(parameter):

@@ -52,8 +52,8 @@ class Livefft:
             Pxx = np.log10(Pxx + 1)*20
             self.length = len(Pxx)
             bands = [0, 0, 0]
-            bass = int(round( self.length * self._piylights.parameters["upper_limit_bass"]))
-            mid = int(round(self.length * self._piylights.parameters["upper_limit_mid"]))
+            bass = int(round( self.length * self._piylights.param("upper_limit_bass")))
+            mid = int(round(self.length * self._piylights.param("upper_limit_mid")))
             intervals = [0, bass, mid, self.length]
             for i in range(3):
                 for element in Pxx[intervals[i] : intervals[i+1]]:
