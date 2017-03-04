@@ -13,17 +13,18 @@
 				<th>name</th>
 				<th>value</th>
 				<th>limits</th>
-				<th>description</th>
 			</tr>
 		</thead>
 		<tbody>
 			<tr ng-repeat="(key, data) in parameters.result.parameters">
-				<td>{a key a}</td>
-				<td>{a data.value a}
-					<!--<input type="text" ng-model="key.value">-->
+				<td><a href="#" data-toggle="tooltip" title="{a data.description a}">{a key a}</a></td>
+				<td>
+					<div ng-if='(data.value)>0 '> <!-- this is literally the worst way to test for "isNumerical"-->
+					<input type="text" ng-model="data.value">
+					</div>
+					<div ng-if="!(data.value) > 0"></div>
 				</td>
 				<td>{a data.limit a}</td>
-				<td>{a data.description a}</td>
 			</tr>
 
 		</tbody>

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import os, sys, inspect
-
+script_path = os.path.dirname(os.path.abspath(__file__))
 import random
 from parser import Parser
 from tcpcontroller import TCPController
@@ -20,6 +20,7 @@ import math
 import time
 import colorsys
 from livefft import Livefft
+from config import Config
 
 class Piylights:
 
@@ -97,6 +98,11 @@ class Piylights:
                 "global_offset_percent" : \
                     {"value": [.25, .25, .25], "limit": [0,1], "description" : "loudness needs to cross this percentage to be considered for color production" },\
                 }
+        
+        self.config = Config(script_path + "/config.json")
+        if self.config.existPreset("#"):
+            self.parameters = self.config.loadPreset("#", self.parameters)
+
 
         self.commands = {
                 "help" : ("help - show help",\
@@ -137,7 +143,7 @@ class Piylights:
                 x.start(0)
         self._livefft = Livefft(self)
         self.updatesPerSecond = self._livefft.interval_s * 60
-        tcp_controller = TCPController(self.port, self)
+        self.tcp_controller = TCPController(self.port, self)
 
     def param(self, name):
         return self.parameters[name]["value"]
@@ -261,12 +267,11 @@ class Piylights:
                 return self.commands[key][1](s)
         return "command not recognized"
 
-    def shutdown():
-        _server.socket.shutdown(socket.SHUT_RDWR)
-        _server.socket.close()
-        _server.server_close()
-        _livefft.win.kill()
-        print("graceful shutdown")
+    def shutdown(self):
+        self._livefft.win.kill()
+        self.tcp_controller.kill()
+        self.config.storeCurrentAndWrite(self.parameters)
+        print("shutting down core")
         quit()
 
 if __name__ == "__main__":

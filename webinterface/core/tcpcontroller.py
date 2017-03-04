@@ -21,8 +21,13 @@ class TCPController:
                     self.request.sendall(ret)
 
     def __init__(self, port, piylights):
-        server = self.ThreadedTCPServer(("localhost", port), self.RequestHandler)
-        server.piylights = piylights
-        server_thread = threading.Thread(target=server.serve_forever)
-        server_thread.daemon = True
-        server_thread.start()
+        self.server = self.ThreadedTCPServer(("localhost", port), self.RequestHandler)
+        self.server.piylights = piylights
+        self.server_thread = threading.Thread(target=self.server.serve_forever)
+        self.server_thread.daemon = True
+        self.server_thread.start()
+
+    def kill(self):
+        self.server.socket.shutdown(socket.SHUT_RDWR)
+        self.server.socket.close()
+        self.server.server_close()

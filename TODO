@@ -1,15 +1,16 @@
 automatic form generation
-load/store parameters/limits on start/shutdown
+load/store parameters on start/shutdown
 preset support
-presets in webinterface (load, create, delete)
+presets in webinterface (load, save, create, delete)
 save/load presets
 authentication for webinterface
 buttons for "fade to color"
 restructure { move fx to separate file, rename files according to code ^^)
 value copied to input field
 alert-thing if value not in limits
+https://jsfiddle.net/V4BqE/
 
-
+maybe group parameters
 
 support chains
 properties:
