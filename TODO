@@ -1,14 +1,9 @@
-automatic form generation
-load/store parameters on start/shutdown
-preset support
-presets in webinterface (load, save, create, delete)
-save/load presets
+jit validation of inputs (partially done)
 authentication for webinterface
 buttons for "fade to color"
 restructure { move fx to separate file, rename files according to code ^^)
-value copied to input field
-alert-thing if value not in limits
-https://jsfiddle.net/V4BqE/
+preset api more crudlike
+unify all fx to fit chain!
 
 maybe group parameters
 
@@ -21,3 +16,13 @@ tick multiplier(slower/faster)
 
 
 finally --> edit chains in webinterface
+
+
+
+
+small things:
+keep dropdown open after click
+beautiful list in dropdown
+fix presetbar
+only delim when not first
+add preset 'tag' to input grp

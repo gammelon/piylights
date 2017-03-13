@@ -24,13 +24,19 @@ class Config:
     def loadPreset(self, preset, parameters):
         return self._populateParam(parameters, self.presets[preset])
 
+    def deletePreset(self, preset):
+        del self.presets[preset]
+
     def storeCurrentAndWrite(self, parameters):
         print("saving config")
-        self.storePreset("#", parameters)
+        self.storePreset("+", parameters)
         self._saveToFile()
 
     def storePreset(self, preset, parameters):
-        self.presets[preset] = self._shrinkParam(parameters)
+        if type(parameters["active"]) == type({}):
+            self.presets[preset] = self._shrinkParam(parameters)
+        else:
+            self.presets[preset] = parameters
 
     def _shrinkParam(self, parameters):
         shrink = {}
@@ -42,6 +48,3 @@ class Config:
         for key in parameters.keys():
             parameters[key]["value"] = shrinked[key]
         return parameters
-
-    def existPreset(self, preset):
-        return preset in self.presets.keys()

@@ -6,7 +6,7 @@ from parser import Parser
 from tcpcontroller import TCPController
 RASPI = False
 OUTPUT = False
-OUTPUT_RAW = True
+OUTPUT_RAW = False
 if "arm" in os.uname()[4]:
     RASPI = True
     OUTPUT = False
@@ -47,8 +47,8 @@ class Piylights:
 
     def setParam(self, p, key):
         if p in list(self.parameters.keys()):
-            if type(key) == type(self.parameters[p]):
-                self.parameters[p] = key
+            if type(key) == type(self.param(p)):
+                self.parameters[p]["value"] = key
                 return True
         else:
             return False
@@ -68,40 +68,41 @@ class Piylights:
                 "raw" : lambda x: x, \
                 "change_with_channel_step" : self.changeWithChannelStep, \
                 "change_with_channel_random" : self.changeWithChannelRandom, \
-                #"change_with_time" : self.changeWithTime, \
+                #"operation_chain" : self.operationChain, \
+                "change_with_time" : self.changeWithTime, \
                 #"single_color" : self.singleColor, \
                 }
         self.parameters = { # parameters to process input
                 "active" : \
-                    {"value":"True", "limit" : ["True", "False"], "description":"global switch" },\
+                        {"value": True, "limit" : [], "type" : "bool", "description":"global switch" },\
                 "upper_limit_bass" : \
-                    {"value": 1/100, "limit": [0,1], "description" : "percentage in frequency range where bass stops and mids begin" },\
+                    {"value": 1/100, "limit": [0,1], "type" : "num", "description" : "percentage in frequency range where bass stops and mids begin" },\
                 "upper_limit_mid" : \
-                    {"value": 1/10 , "limit": [0,1], "description" : "percentage in frequency range where mids stop and treble begins" },\
+                    {"value": 1/10 , "limit": [0,1], "type" : "num", "description" : "percentage in frequency range where mids stop and treble begins" },\
                 "range_narrow_constant" : \
-                    {"value": .000, "limit": [0,10], "description" : "the dynamic range is narrowed each tick by this constant" },\
+                    {"value": .000, "limit": [0,10], "type" : "num", "description" : "the dynamic range is narrowed each tick by this constant" },\
                 "range_extend_linear" : \
-                    {"value": .4, "limit": [0,10],"description" : "the dynamic range is widened by this percentage each tick if the loudness exceeds the current dynamic range" },\
+                    {"value": .4, "limit": [0,10], "type" : "num", "description" : "the dynamic range is widened by this percentage each tick if the loudness exceeds the current dynamic range" },\
                 "range_narrow_linear" : \
-                    {"value": .005, "limit": [0,40], "description" : "the dynamic range is narrowed by this percentage if the loudness is in the dynamic range" },\
+                    {"value": .005, "limit": [0,40], "type" : "num", "description" : "the dynamic range is narrowed by this percentage if the loudness is in the dynamic range" },\
                 "extend_autorange_method" : \
-                {"value": "max", "limit": ["max", "linear"] , "description" : "max: dynamic range is always max(dynamic_range, current_loudness); linear: only extend by percentage (see other values *_linear)" },\
+                {"value": "max", "limit": ["max", "linear"] , "type" : "str", "description" : "max: dynamic range is always max(dynamic_range, current_loudness); linear: only extend by percentage (see other values *_linear)" },\
                 "pp_minimal_difference" : \
-                    {"value": [2.5, 2.5, 2.5], "limit": [0,100], "description" : "minimal wideness of dynamic range for each channel" },\
+                    {"value": [2.5, 2.5, 2.5], "limit": [0,100], "type" : "arr", "description" : "minimal wideness of dynamic range for each channel" },\
                 # parameters to configure methods etc...\
                 "active_method" : \
-                    {"value": "change_with_channel_step", "limit": list(self.methods.keys()), "description" : "method to use for color production" },\
+                    {"value": "change_with_channel_step", "limit": list(self.methods.keys()), "type" : "str", "description" : "method to use for color production" },\
                 "colorchange_cooldown" : \
-                    {"value": .1, "limit": [0,10], "description" : "used with change_with_channel_step, minimal time between two changes" },\
+                    {"value": .1, "limit": [0,10], "type" : "num", "description" : "used with change_with_channel_step, minimal time between two changes" },\
                 "next_color_step" : \
-                    {"value": 1/6, "limit": [0,1], "description" : "size of the color step 0=1=do nothing" },\
+                    {"value": 1/6, "limit": [0,1], "type" : "num", "description" : "size of the color step 0=1=do nothing" },\
                 "global_offset_percent" : \
-                    {"value": [.25, .25, .25], "limit": [0,1], "description" : "loudness needs to cross this percentage to be considered for color production" },\
+                    {"value": [.25, .25, .25], "limit": [0,1], "type" : "arr", "description" : "loudness needs to cross this percentage to be considered for color production" },\
                 }
         
         self.config = Config(script_path + "/config.json")
-        if self.config.existPreset("#"):
-            self.parameters = self.config.loadPreset("#", self.parameters)
+        if "+" in self.config.presets:
+            self.parameters = self.config.loadPreset("+", self.parameters)
 
 
         self.commands = {
@@ -149,9 +150,20 @@ class Piylights:
         return self.parameters[name]["value"]
     def limit(self, name):
         return self.parameters[name]["limit"]
+    def loadPreset(self, name):
+        self.parameters = self.config.loadPreset(name, self.parameters)
+    def getPresets(self):
+        return self.config.presets
+    def storePreset(self, name, preset):
+        return self.config.storePreset(name, preset)
+    def deletePreset(self, name):
+        return self.config.deletePreset(name)
+
+
+
 
     def update(self, rgb):
-        if self.param("active") not in ["True", "true", "TRUE", "1", "+"]:
+        if not self.param("active"):
             self.writeValues([0,0,0])
             return
         rgb = list(map(self.preprocess_function, rgb))
@@ -186,7 +198,6 @@ class Piylights:
                 self.triples["min"][i] += (rgb[i] - self.triples["min"][i]) * self.param("range_extend_linear") * self.updatesPerSecond if self.triples["min"][i] > rgb[i] else 0
                 self.triples["max"][i] += (rgb[i] - self.triples["max"][i]) * self.param("range_extend_linear") *self.updatesPerSecond if self.triples["max"][i] < rgb[i] else 0
         return rgb
-
 
     def narrow_autorange(self, rgb):
         for i in range(3):
@@ -232,16 +243,39 @@ class Piylights:
                 return True
         return False
     
-    def changeWithTime(self, startColor, endColor, percentage):
+    def changeWithTime(self, params, rgb, tick, tickCount):
         res=[0,0,0]
+        percentage = tick / tickCount
         for i in range(3):
-            res[i] += startColor[i] + percentage * (endColor[i] - startColor[i])
+            res[i] += params[0][i] + percentage * (params[1][i] - params[0][i])
         return res
 
-    #def setStrobeParam(self, frequency, dutyCycle):
+    def strobeWithTime(self, params, tick, tickCount):
+        p = {"offset": 4, "colors": [([0,0,0],4), ([1,1,1],5)]}
 
-    def resetStrobe(self):
-        self.setStrobeParam(80, 1)
+
+    def changeChain(self, rgb):
+        s = 0
+        for ticks, name, param in self.param("chain")["chain"]:
+            s += ticks
+        if not self.chainTicks == s - 1:
+            self.chainTicks += 1
+        elif self.param("chain")["chainOptions"]["loop"]:
+            self.chainTicks = 0
+        return self._getPosInChain(self.param("chain"), self.chainTicks, rgb)
+
+
+
+
+    def _getPosInChain(self, chain, tick, rgb):
+        chain = { "chainOptions" : {"loop" : True, "mult" : 1},
+                    "chain" : [(100, "change_with_time", [[0,0,0],[1,0,0]])]
+                }
+        for ticks, name, param in self.param("chain")["chain"]:
+            if tick > ticks:
+                tick -= ticks
+            else:
+                return self.methods[name](params, ticks, tick)
 
     def writeValues(self, rgb):
         if RASPI:

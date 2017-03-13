@@ -1,35 +1,94 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="container" ng-controller="ParameterController">
-	<div class="container">
-		<div class="jumbotron">
-			<h1>{{title}}</h1>
-			<p>a webinterface for the python-based led-controller</p>
-		</div>
-	</div>
-	<table class="table table-striped table-hover table-responsive">
-		<thead>
-			<tr>
-				<th>name</th>
-				<th>value</th>
-				<th>limits</th>
-			</tr>
-		</thead>
-		<tbody>
-			<tr ng-repeat="(key, data) in parameters.result.parameters">
-				<td><a href="#" data-toggle="tooltip" title="{a data.description a}">{a key a}</a></td>
-				<td>
-					<div ng-if='(data.value)>0 '> <!-- this is literally the worst way to test for "isNumerical"-->
-					<input type="text" ng-model="data.value">
-					</div>
-					<div ng-if="!(data.value) > 0"></div>
-				</td>
-				<td>{a data.limit a}</td>
-			</tr>
+<div class="container" ng-controller="plWebCtrl">
+    <div class="jumbotron">
+        <h1>{{title}}</h1>
+        <p>a webinterface for the python-based led-controller</p>
+        <div class="row">
+            <div class="col-sm-6">
+                <button type="button" class="btn btn-primary" ng-disabled="parameterForm.$invalid" ng-click="saveAll()">save parameters</button>
+            </div>
+            <div class="col-sm-0"></div>
+            <div class="col-sm-5">
+                    <div class="input-group form-group">
+                        <div class="form-group" ng-class="{ 'has-error' : presetNameForm.presetNameTxb.$invalid && !presetNameForm.presetNameTxt.pristine }">
+                            <input type="text" class="form-control" ng-model="PresetName" placeholder="Enter name" name="presetNameTxb" required>
+                        </div>
+                        <div class="input-group-btn">
+                            <button class="btn btn-primary" type="button" ng-click="storePreset(PresetName)" ng-disabled="presetNameForm.$invalid || parameterForm.$invalid">
+                                <span class="glyphicon glyphicon-floppy-disk"></span> save
+                            </button>
+                        </div>
+                        <div class="input-group-btn">
+                            <button class="btn btn-primary dropdown-toggle" type="button" data-toggle="dropdown">
+                                load/delete
+                                <span class="caret"></span>
+                            </button>
+                            <ul class="dropdown-menu">
+                                <div ng-if="!hasPresets()">
+                                    <li class="disabled">No presets</li>
+                                </div>
+                                <div ng-repeat="(key, data) in presets.result.presets">
+                                    <div ng-if="key !== '+'"> <!-- ignore last used -->
+                                        <li class="divider"></li>
+                                        <li>
+                                            <div class="btn-group">
+                                                <button class="btn btn-success btn-sm" type="button" ng-click="loadPreset(key)"><span class="glyphicon glyphicon-play"></span> {a key a}</button>
+                                                <button class="btn btn-warning btn-sm" type="button" ng-click="deletePreset(key)"><span class="glyphicon glyphicon-trash"></span></button>
+                                            </div>
+                                        </li>
+                                    </div>
+                                </div>
+                            </ul>
+                        </div>
+                    </div>
+            </div>
+            <div class="col-sm-1"></div>
+        </div>
+    </div>
+    <div class="row">
 
-		</tbody>
-	</table>
-	<button type="button" class="btn btn-primary active">save values</button>
+    </div>
+    <form name="parameterForm" novalidate>
+        <table class="table table-striped table-responsive">
+            <thead>
+                <tr>
+                    <th>name</th>
+                    <th>value</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr ng-repeat="(key, data) in parameters.result.parameters">
+                    <td><a href="#" data-toggle="tooltip" title="{a data.description a}">{a key a}</a></td>
+                    <td>
+                        <div ng-switch="data.type">
+                            <div ng-switch-when="num" class="form-group" ng-class="{ 'has-error' : parameterForm.{akeya}.$invalid && !parameterForm.{akeya}.pristine }">
+                                <input type="number" min="{a data.limit[0] a}" max="{a data.limit[1] a}" class="form-control" ng-model="data.value" placeholder="Enter a number between {a data.limit[0] a} and {a data.limit[1] a}" required name="{akeya}">
+                                <p ng-show="parameterForm.{akeya}.$invalid && !userForm.{akeya}.$pristine" class="help-block">Please enter a number between {a data.limit[0] a} and {a data.limit[1] a}!</p>
+                            </div>
+                            <div ng-switch-when="bool">
+                                <input type="checkbox" ng-model="data.value">
+                            </div>
+                            <div ng-switch-when="arr">
+                                <div ng-repeat="entry in data.value track by $index" ng-class="{ 'has-error' : parameterForm.{akeya}{a$indexa}.$invalid && !parameterForm.{akeya}{a$indexa}.pristine }">
+                                    <input type="number" min="{a data.limit[0] a}" max="{a data.limit[1] a}" name="{akeya}{a$indexa}" class="form-control" ng-model="entry" placeholder="Enter a number between {a data.limit[0] a} and {a data.limit[1] a}" required>
+                                    <p ng-show="parameterForm.{akeya}{a$indexa}.$invalid && !userForm.{akeya}$index.$pristine" class="help-block">Please enter a number between {a data.limit[0] a} and {a data.limit[1] a}!</p>
+                                </div>
+                            </div>
+                            <div ng-switch-when="str">
+                                <select class="form-control" ng-model="data.value">
+                                    <option ng-selected="data.value == val" ng-repeat="val in data.limit" ng-value="val">
+                                    {a val a}
+                                    </option>
+                                </select>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+
+            </tbody>
+        </table>
+    </form>
 
 </div>
 {% endblock %}
