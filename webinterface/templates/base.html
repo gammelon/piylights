@@ -1,36 +1,26 @@
 <!DOCTYPE html>
 <html ng-app="plWeb">
-	<head>
-		<title>{{ title }}</title>
-		<script src="/static/js/angular.min.js"></script>
-		<script src="/static/js/angular-resource.min.js"></script>
+        <head>
+                <title>{{ title }}</title>
+                <script src="/static/js/angular.min.js"></script>
+                <script src="/static/js/angular-resource.min.js"></script>
 
-		<script src="/static/js/jquery-3.1.1.min.js"></script>
+                <script src="/static/js/jquery-3.1.1.min.js"></script>
 
-		<link rel="stylesheet" href="/static/css/bootstrap-3.3.7.min.css">
-		<link rel="stylesheet" href="/static/css/bootstrap-theme-3.3.7.min.css">
-		<script src="/static/js/bootstrap-3.3.7.min.js"></script>
+                <link rel="stylesheet" href="/static/css/bootstrap-3.3.7.min.css">
+                <link rel="stylesheet" href="/static/css/bootstrap-theme-3.3.7.min.css">
+                <script src="/static/js/bootstrap-3.3.7.min.js"></script>
 
-		<script src='/static/js/frontend.js'></script>
-		<script>
-			$(document).ready(function(){
-			$('[data-toggle="tooltip"]').tooltip();
-			});
-		</script>
+                <script src='/static/js/frontend.js'></script>
+                <script>
+                        $(document).ready(function(){
+                        $('[data-toggle="tooltip"]').tooltip();
+                        });
+                </script>
+                <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.png') }}">
 
-		<meta name="viewport" content"width=device-width, initial-scale=1">
-	</head> <body>
-		<!--<nav class="navbar navbar-inverse">
-			<div class="container-fluid">
-				<div class="navbar-header">
-					<a class="navbar-brand" href="/index">{{title}}</a>
-				</div>
-			</div>
-		</nav>-->
-		{% block content %}{% endblock %}
-			<!--<p>Name: <input type='text' ng-model='name' ng-change='test()'></p>
-			<input type='text' ng-model='test()' value='{{ result }}'/>
-			<p ng-bind='name', ng-change='test()'></p>
-			<p>Expression test: {{ 5 / 4 }} </p>-->
-	</body>
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+        </head> <body>
+                {% block content %}{% endblock %}
+        </body>
 </html>
