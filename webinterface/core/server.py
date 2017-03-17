@@ -5,7 +5,7 @@ import random
 from parser import Parser
 from tcpcontroller import TCPController
 RASPI = False
-OUTPUT = False
+OUTPUT = True
 OUTPUT_RAW = False
 if "arm" in os.uname()[4]:
     RASPI = True
@@ -66,12 +66,93 @@ class Piylights:
         self.port = 12345
         self.methods = {
                 "raw" : lambda x: x, \
-                "change_with_channel_step" : self.changeWithChannelStep, \
+                "change_with_channel_step" : self.changeWithChannelStep,\
                 "change_with_channel_random" : self.changeWithChannelRandom, \
-                #"operation_chain" : self.operationChain, \
                 "change_with_time" : self.changeWithTime, \
-                #"single_color" : self.singleColor, \
+                "do_nothing" : self.doNothing, \
+                "single_color" : self.singleColor, \
+                "strobe_with_time" : self.strobeWithTime, \
                 }
+        self.method_params = {
+                        "strobe_with_time" : {\
+                                "params" : {\
+                                    "color0" : {
+                                        "name" : "Color 1",\
+                                        "type" : "color",\
+                                        "description" : "Color 1",\
+                                        "default" : "#000000"
+                                    },\
+                                    "color1" : {
+                                        "name" : "Color 2",\
+                                        "type" : "color",\
+                                        "description" : "Color 2",\
+                                        "default" : "#ffffff"
+                                    },\
+                                    "tick0" : {
+                                        "name" : "#ticks 1",\
+                                        "type" : "num",\
+                                        "description" : "how many ticks is Color 1 displayed",\
+                                        "default" : 4
+                                    },\
+                                    "tick1" : {
+                                        "name" : "#ticks 2",\
+                                        "type" : "num",\
+                                        "description" : "how many ticks is Color 2 displayed",\
+                                        "default" : 8
+                                    },\
+                                },
+                                "displayName" : "Strobe two colors"
+                            },\
+                        "change_with_time" : {\
+                                "params" : {\
+                                    "color0" : {
+                                        "name" : "Start Color",\
+                                        "type" : "color",\
+                                        "description" : "Color at the start of transition",\
+                                        "default" : "#000000"
+                                    },\
+                                    "color1" : {
+                                        "name" : "End Color",\
+                                        "type" : "color",\
+                                        "description" : "Color at the end of transition",\
+                                        "default" : "#ffffff"
+                                    },\
+                                },
+                                "displayName" : "Fade two colors"
+                            },\
+
+                        "single_color" : {\
+                                "params" : {\
+                                    "color" : {
+                                        "name" : "Color",\
+                                        "type" : "color",\
+                                        "description" : "duh!",\
+                                        "default" : "#00ff00"
+                                    },\
+                                },
+                                "displayName" : "Single color"
+                            },\
+
+                        "change_with_channel_step" : {\
+                                "params" : {\
+                                    "colorchange_cooldown" : {
+                                            "name" : "Cooldown in s/100",\
+                                            "type" : "num",\
+                                            "description" : "minimal time between color changes",\
+                                            "default" : 25
+                                        },\
+                                },\
+                                "displayName" : "Music cyclic colorchange"
+                                },\
+
+                        "do_nothing" : {\
+                                "params" :{},\
+                                "displayName" : "Do nothing"
+
+                                },\
+
+                }
+
         self.parameters = { # parameters to process input
                 "active" : \
                         {"value": True, "limit" : [], "type" : "bool", "description":"global switch" },\
@@ -86,18 +167,13 @@ class Piylights:
                 "range_narrow_linear" : \
                     {"value": .005, "limit": [0,40], "type" : "num", "description" : "the dynamic range is narrowed by this percentage if the loudness is in the dynamic range" },\
                 "extend_autorange_method" : \
-                {"value": "max", "limit": ["max", "linear"] , "type" : "str", "description" : "max: dynamic range is always max(dynamic_range, current_loudness); linear: only extend by percentage (see other values *_linear)" },\
+                    {"value": "max", "limit": ["max", "linear"] , "type" : "str", "description" : "max: dynamic range is always max(dynamic_range, current_loudness); linear: only extend by percentage (see other values *_linear)" },\
                 "pp_minimal_difference" : \
                     {"value": [2.5, 2.5, 2.5], "limit": [0,100], "type" : "arr", "description" : "minimal wideness of dynamic range for each channel" },\
-                # parameters to configure methods etc...\
-                "active_method" : \
-                    {"value": "change_with_channel_step", "limit": list(self.methods.keys()), "type" : "str", "description" : "method to use for color production" },\
-                "colorchange_cooldown" : \
-                    {"value": .1, "limit": [0,10], "type" : "num", "description" : "used with change_with_channel_step, minimal time between two changes" },\
-                "next_color_step" : \
-                    {"value": 1/6, "limit": [0,1], "type" : "num", "description" : "size of the color step 0=1=do nothing" },\
                 "global_offset_percent" : \
                     {"value": [.25, .25, .25], "limit": [0,1], "type" : "arr", "description" : "loudness needs to cross this percentage to be considered for color production" },\
+                "chain" : \
+                    {"value": {"chainOptions": {"loop" : True, "mult" : 1}, "chain" : [(100, "change_with_time", {"color0" : "#000000", "color1": "#0000ff"})]}, "limit": [], "type" : "special", "description" : "chain of command..." },\
                 }
         
         self.config = Config(script_path + "/config.json")
@@ -129,6 +205,7 @@ class Piylights:
         #self.channelthreshold = [ ( [0], 0.65 ) ] #0 bass 1 mid 2 treble
         self.triples = {"min" : [0] * 3, "max" : [5] * 3}
         self.colorswitch = 0
+        self.chainTicks = 0
         frequency = 90
         if RASPI:
             print("detected raspi")
@@ -159,8 +236,11 @@ class Piylights:
     def deletePreset(self, name):
         return self.config.deletePreset(name)
 
-
-
+    def htmlColorToRGB(self, htmlstring):
+        rgb=[0,0,0]
+        for i in range(3):
+            rgb[i] = int(htmlstring[1+i*2:1+(i+1)*2], 16) / 255.0
+        return rgb
 
     def update(self, rgb):
         if not self.param("active"):
@@ -172,11 +252,34 @@ class Piylights:
         self.extend_autorange(rgb)
         self.post_process(rgb)
         raw = self.raw(rgb)
-        processed = self.methods[self.param("active_method")](raw)
+        #self.lastcolor = self.methods[self.param("active_method")](raw)
+        self.lastcolor = self.operationChain(raw)
         if OUTPUT_RAW:
             self.printValues(raw)
-        self.printValues(processed)
-        self.writeValues(processed)
+        if not self.lastcolor is None:
+            self.printValues(self.lastcolor)
+            self.writeValues(self.lastcolor)
+
+    def operationChain(self, rgb):
+        s = 0
+        for ticks, name, param in self.param("chain")["chain"]:
+            s += ticks
+        self.param("chain")["chainOptions"]["chainLength"] = s
+        if not self.chainTicks == s - 1:
+            self.chainTicks += 1
+        elif self.param("chain")["chainOptions"]["loop"]:
+            self.chainTicks = 0
+        return self._getPosInChain(self.param("chain"), self.chainTicks, rgb)
+
+    def _getPosInChain(self, chain, tick, rgb):
+        chain = { "chainOptions" : {"loop" : True, "mult" : 1},
+                    "chain" : [(100, "change_with_time", [[0,0,0],[1,0,0]])]
+                }
+        for totalTicks, name, params in self.param("chain")["chain"]:
+            if tick >= totalTicks:
+                tick -= totalTicks
+            else:
+                return self.methods[name](params, rgb, tick, totalTicks)
 
     def raw(self, rgb):
         res = rgb
@@ -223,18 +326,18 @@ class Piylights:
                 self.colorswitch + step
         return colorsys.hsv_to_rgb(self.colorswitch, 1, 1)
 
-    def changeWithChannelRandom(self, rgb):
-        if self._changeColorCheck(self, rgb):
-            self.lastcolor = self.randomColor()
+    def changeWithChannelRandom(self, params, rgb, tick, totalTicks):
+        if self._changeColorCheck(rgb, params):
+            return self.randomColor()
         return self.lastcolor
     
-    def changeWithChannelStep(self, rgb):
-        if self._changeColorCheck(rgb):
-            self.lastcolor = self.stepColor(self.param("next_color_step"))
+    def changeWithChannelStep(self, params, rgb, tick, totalTicks):
+        if self._changeColorCheck(rgb, params):
+            return self.stepColor(params["next_color_step"])
         return self.lastcolor
 
-    def _changeColorCheck(self, rgb):
-        if (os.times()[4] - self.lastchange) < self.param("colorchange_cooldown"):
+    def _changeColorCheck(self, rgb, params):
+        if (os.times()[4] - self.lastchange) < (params["colorchange_cooldown"] / 100):
             return False
         self.lastchange = os.times()[4]
 
@@ -242,40 +345,29 @@ class Piylights:
             if (sum([rgb[i] for i in channels]) > (threshold * (len(channels)))):
                 return True
         return False
+
+    def doNothing(self, params, rgb, tick, totalTicks):
+        return self.lastcolor
     
-    def changeWithTime(self, params, rgb, tick, tickCount):
+    def changeWithTime(self, params, rgb, tick, totalTicks):
         res=[0,0,0]
-        percentage = tick / tickCount
+        percentage = tick / totalTicks
+        start = self.htmlColorToRGB(params["color0"])
+        end = self.htmlColorToRGB(params["color1"])
+
         for i in range(3):
-            res[i] += params[0][i] + percentage * (params[1][i] - params[0][i])
+            res[i] += start[i] + percentage * (end[i] - start[i])
         return res
 
-    def strobeWithTime(self, params, tick, tickCount):
-        p = {"offset": 4, "colors": [([0,0,0],4), ([1,1,1],5)]}
+    def singleColor(self, params, rgb, tick, totalTicks):
+        return self.htmlColorToRGB(params["color"])
 
-
-    def changeChain(self, rgb):
-        s = 0
-        for ticks, name, param in self.param("chain")["chain"]:
-            s += ticks
-        if not self.chainTicks == s - 1:
-            self.chainTicks += 1
-        elif self.param("chain")["chainOptions"]["loop"]:
-            self.chainTicks = 0
-        return self._getPosInChain(self.param("chain"), self.chainTicks, rgb)
-
-
-
-
-    def _getPosInChain(self, chain, tick, rgb):
-        chain = { "chainOptions" : {"loop" : True, "mult" : 1},
-                    "chain" : [(100, "change_with_time", [[0,0,0],[1,0,0]])]
-                }
-        for ticks, name, param in self.param("chain")["chain"]:
-            if tick > ticks:
-                tick -= ticks
-            else:
-                return self.methods[name](params, ticks, tick)
+    def strobeWithTime(self, params, rgb, tick, totalTicks): #ignored for the time...
+        t0 = params["tick0"]
+        t1 = params["tick1"]
+        if (tick - 0) % (t0 + t1) < t0:
+            return self.htmlColorToRGB(params["color0"])
+        return self.htmlColorToRGB(params["color1"])
 
     def writeValues(self, rgb):
         if RASPI:

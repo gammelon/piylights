@@ -46,6 +46,8 @@ class Livefft:
                 #print(1000 * (end - start))
 
         def update(self):
+            if not self._piylights.parameters["active"]["value"]:
+                return
             data = self.recorder.get_buffer()
             weighting = np.exp(self.timeValues / self.timeValues[-1])
             Pxx = self.fft_buffer(weighting * data[:, 0])

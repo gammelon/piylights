@@ -58,3 +58,7 @@ def deletePreset(presetName):
     else:
         piylights.deletePreset(presetName)
         return jsonify({"result" : "", "status" : "SUCCESS"})
+
+@app.route("/api/methods", methods=["GET"])
+def getMethods():
+    return jsonify(piylights.method_params)

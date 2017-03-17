@@ -6,7 +6,14 @@ preset api more crudlike
 unify all fx to fit chain!
 
 maybe group parameters
+merge operationChain(...) with update(...) after everything is converted
 
+maybe add a "displayname" for the params and so on... low priority
+reduce load when saving params by checking $pristine
+almost everything is unchecked in this code, if some value does not fit the expected model everything fails
+--> introduce some error checking
+
+make sure all values are initialized
 support chains
 properties:
 chains loop over arrays of modes with settings
@@ -14,6 +21,7 @@ e.g. strobe yellow for 100 ticks, then fade to blue, loop
 loop y/n
 tick multiplier(slower/faster)
 
+--> new parameter dict
 
 finally --> edit chains in webinterface
 
@@ -22,6 +30,7 @@ finally --> edit chains in webinterface
 
 small things:
 keep dropdown open after click
+fix btn group (rectangular buttons in the middle)
 beautiful list in dropdown
 fix presetbar
 only delim when not first
