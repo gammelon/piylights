@@ -37,17 +37,16 @@ class Livefft:
 
         def run(self):
             print ("Updating graphs every %.1f ms" % (self.interval_s*1000))
+            lastexecute = time.time()
             while(True):
-                if self.shutdown:
-                    return
-                time.sleep(self.interval_s)
-                start = time.time()
+                time.sleep(self.interval_s - (time.time() - lastexecute))
+                lastexecute = time.time()
                 self.update()
                 end = time.time()
+                if self.shutdown:
+                    return
                 #print(1000 * (end - start))
         def update(self):
-            if not self._piylights.parameters["active"]["value"]:
-                return
             data = self.recorder.get_buffer()
             weighting = np.exp(self.timeValues / self.timeValues[-1])
             Pxx = self.fft_buffer(weighting * data[:, 0])

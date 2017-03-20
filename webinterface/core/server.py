@@ -13,7 +13,7 @@ if "arm" in os.uname()[4]:
     OUTPUT_RAW = False
 #OUTPUT = False
 if RASPI:
-    import RPi.GPIO as gp 
+    import pigpio
 import time
 import threading
 import math
@@ -23,44 +23,6 @@ from livefft import Livefft
 from config import Config
 
 class Piylights:
-
-    def controlStringHelp(self, s):
-        ret = "commands:\n"
-        for key in self.commands.keys():
-            ret += self.commands[key][0] + "\n"
-        return ret
-
-    def controlStringGetparam(self, s):
-        ret = "parameters:\n___________\n"
-        for key in self.parameters.keys():
-            ret += key + " : " + str(self.param[key]) + "\n"
-        return ret
-
-    def controlStringGetlimit(self, s):
-        ret = "limits:\n___________\n"
-        for key in self.limits.keys():
-            ret += key + " : " + str(self.limit[key]) + "\n"
-        return ret
-
-    def controlStringShutdown(self, s):
-        return self.shutdown()
-
-    def setParam(self, p, key):
-        if p in list(self.parameters.keys()):
-            if type(key) == type(self.param(p)):
-                self.parameters[p]["value"] = key
-                return True
-        else:
-            return False
-
-    def controlStringSetparam(self, s):
-        if len(s) < 3:
-            return "not enough arguments"
-        res = self.setParam(s[1], s[2])
-        if res:
-            return "SUCCESS: changed parameter " + p
-        else:
-            return "FAILURE: parameter " + p + " not present in configuration"
 
     def __init__(self):
         self.port = 12345
@@ -180,24 +142,11 @@ class Piylights:
         if "+" in self.config.presets:
             self.parameters = self.config.loadPreset("+", self.parameters)
 
-
-        self.commands = {
-                "help" : ("help - show help",\
-                        self.controlStringHelp),\
-                "setparam" : ("setparam [name] [value] - set value of parameter",\
-                        self.controlStringSetparam),\
-                "getparam" : ("getparam - get names and values of all parameters",\
-                        self.controlStringGetparam),\
-                "getlimit" : ("getlimit - get limits or possible values for each parameter",\
-                        self.controlStringGetlimit),\
-                "shutdown" : ("shutdown - stop piylights",\
-                        self.controlStringShutdown),\
-                }
-
         self.preprocess_function = lambda x: math.log(x + 1) #logarithmic scale
         #self.preprocess_function = lambda x: x #linear
 
-        led_channels = [12, 16, 18, 22]
+        #led_channels = [12, 16, 18, 22]
+        self.led_channels_broadcom = [18, 23, 24, 25]
 
         self.lastchange = os.times()[4]
         self.lastcolor = (1, 0, 0)
@@ -207,22 +156,18 @@ class Piylights:
         self.triples = {"min" : [0] * 3, "max" : [5] * 3}
         self.colorswitch = 0
         self.chainTicks = 0
-        frequency = 90
         if RASPI:
             print("detected raspi")
-            gp.setmode(gp.BOARD)
-            gp.setwarnings(False)
-            gp.setup(led_channels, gp.OUT)
-            gp.output(led_channels[0], gp.LOW)
-            self.rpiOut = [
-                    gp.PWM(led_channels[1],frequency), \
-                    gp.PWM(led_channels[2],frequency), \
-                    gp.PWM(led_channels[3],frequency)]
-            for x in self.rpiOut:
-                x.start(0)
+            self.pig = pigpio.pi()
+            for c in self.led_channels_broadcom:
+                self.pig.set_mode(c, pigpio.OUTPUT)
+            for c in self.led_channels_broadcom[1:]:
+                self.pig.set_PWM_range(c, 8000)
+                self.pig.set_PWM_frequency(c, 8000)
+            pig.write(self.led_channels_broadcom[0], 0)
         self._livefft = Livefft(self)
         self.updatesPerSecond = self._livefft.interval_s * 60
-        self.tcp_controller = TCPController(self.port, self)
+        #self.tcp_controller = TCPController(self.port, self)
 
     def param(self, name):
         return self.parameters[name]["value"]
@@ -256,7 +201,6 @@ class Piylights:
         self.extend_autorange(rgb)
         self.post_process(rgb)
         raw = self.raw(rgb)
-        #self.lastcolor = self.methods[self.param("active_method")](raw)
         self.lastcolor = self.operationChain(raw)
         if OUTPUT_RAW:
             self.printValues(raw)
@@ -380,8 +324,8 @@ class Piylights:
 
     def writeValues(self, rgb):
         if RASPI:
-            for x in range(3):
-                self.rpiOut[x].ChangeDutyCycle(rgb[x]*100)
+            for i in range(3):
+                self.pig.set_PWM_dutycycle(self.led_channels_broadcom[i+1], rgb[i])
         return rgb
 
     def printValues(self, rgb):
@@ -393,19 +337,11 @@ class Piylights:
             print("\n")
         return rgb
 
-    def controlString(self, s):
-        s = Parser.parse(s)
-        if len(s) < 1:
-            return
-        for key in list(self.commands):
-            if s[0] == key:
-                return self.commands[key][1](s)
-        return "command not recognized"
-
     def shutdown(self):
         self._livefft.win.kill()
         self.tcp_controller.kill()
         self.config.storeCurrentAndWrite(self.parameters)
+        self.pig.stop()
         print("shutting down core")
         quit()
 

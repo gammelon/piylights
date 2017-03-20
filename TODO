@@ -5,6 +5,9 @@ restructure { move fx to separate file, rename files according to code ^^)
 preset api more crudlike
 unify all fx to fit chain!
 
+activate/deactivate bug
+sometimes outputting "failed" over and over, why?
+
 maybe group parameters
 merge operationChain(...) with update(...) after everything is converted
 
@@ -20,8 +23,6 @@ chains loop over arrays of modes with settings
 e.g. strobe yellow for 100 ticks, then fade to blue, loop
 loop y/n
 tick multiplier(slower/faster)
-
---> new parameter dict
 
 finally --> edit chains in webinterface
 
