@@ -22,6 +22,8 @@ import colorsys
 from livefft import Livefft
 from config import Config
 
+PWM_FREQUENCY = 100
+PWM_RANGE = 500
 class Piylights:
 
     def __init__(self):
@@ -162,9 +164,9 @@ class Piylights:
             for c in self.led_channels_broadcom:
                 self.pig.set_mode(c, pigpio.OUTPUT)
             for c in self.led_channels_broadcom[1:]:
-                self.pig.set_PWM_range(c, 8000)
-                self.pig.set_PWM_frequency(c, 8000)
-            pig.write(self.led_channels_broadcom[0], 0)
+                self.pig.set_PWM_range(c, PWM_RANGE)
+                self.pig.set_PWM_frequency(c, PWM_FREQUENCY)
+            self.pig.write(self.led_channels_broadcom[0], 0)
         self._livefft = Livefft(self)
         self.updatesPerSecond = self._livefft.interval_s * 60
         #self.tcp_controller = TCPController(self.port, self)
@@ -181,6 +183,14 @@ class Piylights:
         return self.config.storePreset(name, preset)
     def deletePreset(self, name):
         return self.config.deletePreset(name)
+
+    def setParam(self, p, key):
+        if p in list(self.parameters.keys()):
+            if type(key) == type(self.param(p)):
+                self.parameters[p]["value"] = key
+                return True
+            else:
+                return False
 
     def htmlColorToRGB(self, htmlstring):
         if htmlstring in self.htmlColors.keys():
@@ -325,7 +335,7 @@ class Piylights:
     def writeValues(self, rgb):
         if RASPI:
             for i in range(3):
-                self.pig.set_PWM_dutycycle(self.led_channels_broadcom[i+1], rgb[i])
+                self.pig.set_PWM_dutycycle(self.led_channels_broadcom[i+1], rgb[i] * PWM_RANGE)
         return rgb
 
     def printValues(self, rgb):
@@ -339,7 +349,6 @@ class Piylights:
 
     def shutdown(self):
         self._livefft.win.kill()
-        self.tcp_controller.kill()
         self.config.storeCurrentAndWrite(self.parameters)
         self.pig.stop()
         print("shutting down core")
