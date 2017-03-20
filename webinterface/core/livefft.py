@@ -13,6 +13,7 @@ class Livefft:
             self._piylights = piylights
             self.timeValues = self.recorder.timeValues
             self.interval_s = (self.recorder.chunk_size / self.recorder.fs)
+            print(self.interval_s)
             self.shutdown = False
 
         def kill(self):
@@ -44,7 +45,6 @@ class Livefft:
                 self.update()
                 end = time.time()
                 #print(1000 * (end - start))
-
         def update(self):
             if not self._piylights.parameters["active"]["value"]:
                 return
@@ -58,8 +58,7 @@ class Livefft:
             mid = int(round(self.length * self._piylights.param("upper_limit_mid")))
             intervals = [0, bass, mid, self.length]
             for i in range(3):
-                for element in Pxx[intervals[i] : intervals[i+1]]:
-                    bands[i] += element
+                bands[i] = sum(Pxx[intervals[i] : intervals[i+1]])
             self._piylights.update(bands)
 
 

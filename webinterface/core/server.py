@@ -5,7 +5,7 @@ import random
 from parser import Parser
 from tcpcontroller import TCPController
 RASPI = False
-OUTPUT = True
+OUTPUT = False
 OUTPUT_RAW = False
 if "arm" in os.uname()[4]:
     RASPI = True
@@ -201,6 +201,7 @@ class Piylights:
 
         self.lastchange = os.times()[4]
         self.lastcolor = (1, 0, 0)
+        self.htmlColors = {}
         self.channelthreshold = [ ( [0], 0.7 ), ( [1], 0.75 ), ( [2], 0.75), ( [0, 1, 2], 0.65 ) ] #0 bass 1 mid 2 treble
         #self.channelthreshold = [ ( [0], 0.65 ) ] #0 bass 1 mid 2 treble
         self.triples = {"min" : [0] * 3, "max" : [5] * 3}
@@ -237,9 +238,12 @@ class Piylights:
         return self.config.deletePreset(name)
 
     def htmlColorToRGB(self, htmlstring):
+        if htmlstring in self.htmlColors.keys():
+            return self.htmlColors[htmlstring]
         rgb=[0,0,0]
         for i in range(3):
             rgb[i] = int(htmlstring[1+i*2:1+(i+1)*2], 16) / 255.0
+        self.htmlColors[htmlstring] = rgb
         return rgb
 
     def update(self, rgb):
@@ -303,12 +307,17 @@ class Piylights:
         return rgb
 
     def narrow_autorange(self, rgb):
-        for i in range(3):
-            d = self.triples["max"][i] - self.triples["min"][i]
-            self.triples["max"][i] -= self.param("range_narrow_linear") * d * self.updatesPerSecond
-            self.triples["max"][i] -= self.param("range_narrow_constant") * self.updatesPerSecond
-            self.triples["min"][i] += self.param("range_narrow_linear") * d * self.updatesPerSecond
-            self.triples["min"][i] += self.param("range_narrow_constant") * self.updatesPerSecond
+        if self.param("range_narrow_linear") != 0:
+            linear = self.param("range_narrow_linear")
+            for i in range(3):
+                d = self.triples["max"][i] - self.triples["min"][i]
+                self.triples["max"][i] -= linear * d * self.updatesPerSecond
+                self.triples["min"][i] += linear * d * self.updatesPerSecond
+        if self.param("range_narrow_constant") != 0:
+            for i in range(3):
+                constant = self.param("range_narrow_constant")
+                self.triples["max"][i] -= constant * self.updatesPerSecond
+                self.triples["min"][i] += constant * self.updatesPerSecond
         return rgb
 
     def post_process(self, rgb):
