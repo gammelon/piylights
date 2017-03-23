@@ -188,6 +188,8 @@ class Piylights:
         if p in list(self.parameters.keys()):
             if type(key) == type(self.param(p)):
                 self.parameters[p]["value"] = key
+                if p == "chain":
+                    self.chainTicks = 0
                 return True
             else:
                 return False
@@ -222,11 +224,12 @@ class Piylights:
         s = 0
         for ticks, name, param in self.param("chain")["chain"]:
             s += ticks
-        self.param("chain")["chainOptions"]["chainLength"] = s
-        if not self.chainTicks == s - 1:
-            self.chainTicks += 1
-        elif self.param("chain")["chainOptions"]["loop"]:
-            self.chainTicks = 0
+        self.chainTicks += self.param("chain")["chainOptions"]["mult"]
+        if self.chainTicks >= s:
+            if self.param("chain")["chainOptions"]["loop"]:
+                self.chainTicks -= s
+            else:
+                self.chainTicks = s - 1
         return self._getPosInChain(self.param("chain"), self.chainTicks, rgb)
 
     def _getPosInChain(self, chain, tick, rgb):
@@ -350,7 +353,8 @@ class Piylights:
     def shutdown(self):
         self._livefft.win.kill()
         self.config.storeCurrentAndWrite(self.parameters)
-        self.pig.stop()
+        if RASPI:
+            self.pig.stop()
         print("shutting down core")
         quit()
 

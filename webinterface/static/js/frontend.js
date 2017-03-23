@@ -28,8 +28,7 @@ plWebservicesv.factory("Preset", function($resource) {
 });
 plWebservicesv.factory("Method", function($resource) {
         return $resource("/api/methods/:methodName", {},
-                {query: {method:"GET", isArray:false}},
-                );
+                {query: {method:"GET", isArray:false}});
 });
 
 var plWebcontrollersv = angular.module("plWeb.controller", ["plWeb.services"]);
@@ -49,6 +48,23 @@ plWebcontrollersv.controller('plWebCtrl', function($scope, Parameter, Preset, Me
         saveParameterNoQuery(parametername);
         $scope.parameters = Parameter.query();
     }
+
+    $scope.isBreakpoint = function(number) {
+        if ($(".device-xs").is(":visible") && (number + 1) % 2 == 0) {
+            return true;
+        }
+        if ($(".device-sm").is(":visible") && (number + 1) % 3 == 0) {
+            return true;
+        }
+        if ($(".device-md").is(":visible") && (number + 1) % 3 == 0) {
+            return true;
+        }
+        if ($(".device-lg").is(":visible") && (number + 1) % 4 == 0) {
+            return true;
+        }
+        return false;
+    }
+
 
     saveParameterNoQuery = function(parametername) {
         Parameter.save({parameterName: parametername},{value:$scope.parameters.result.parameters[parametername]["value"]});
