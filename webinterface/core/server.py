@@ -219,6 +219,8 @@ class Piylights:
         if not self.lastcolor is None:
             self.printValues(self.lastcolor)
             self.writeValues(self.lastcolor)
+        else:
+            print("hot damn")
 
     def operationChain(self, rgb):
         s = 0
@@ -233,13 +235,18 @@ class Piylights:
         return self._getPosInChain(self.param("chain"), self.chainTicks, rgb)
 
     def _getPosInChain(self, chain, tick, rgb):
-        chain = { "chainOptions" : {"loop" : True, "mult" : 1},
-                    "chain" : [(100, "change_with_time", [[0,0,0],[1,0,0]])]
-                }
+        if random.random() < .05:
+            print(chain)
         for totalTicks, name, params in self.param("chain")["chain"]:
             if tick >= totalTicks:
                 tick -= totalTicks
             else:
+                if random.random() < 0.0025:
+                    print(params)
+                    print(rgb)
+                    print(tick)
+                    print(totalticks)
+
                 return self.methods[name](params, rgb, tick, totalTicks)
 
     def raw(self, rgb):
