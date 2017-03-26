@@ -39,7 +39,8 @@ class Livefft:
             print ("Updating graphs every %.1f ms" % (self.interval_s*1000))
             lastexecute = time.time()
             while(True):
-                time.sleep(abs(self.interval_s - (time.time() - lastexecute)))
+                if (time.time() - lastexecute) < self.interval_s:
+                    time.sleep(abs(self.interval_s - (time.time() - lastexecute)))
                 #time.sleep(self.interval_s)
                 lastexecute = time.time()
                 self.update()

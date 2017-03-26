@@ -50,7 +50,7 @@ plWebcontrollersv.controller('plWebCtrl', function($scope, Parameter, Preset, Me
     }
 
     $scope.isBreakpoint = function(number) {
-        if ($(".device-xs").is(":visible") && (number + 1) % 2 == 0) {
+        if ($(".device-xs").is(":visible")) {
             return true;
         }
         if ($(".device-sm").is(":visible") && (number + 1) % 3 == 0) {
