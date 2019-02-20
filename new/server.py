@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-RASPI = False
+RASPI = True
 from socketserver import ThreadingUDPServer, BaseRequestHandler
+import time
 if RASPI:
     import pigpio
 PORT = 15300
@@ -15,10 +16,22 @@ class PiylightsUDPServer:
         def __init__(self, server_address, RequestHandlerClass, data_ex):
             ThreadingUDPServer.__init__(self, server_address, RequestHandlerClass)
             self.data_ex = data_ex
+            self.data_ex['avg-interval'] = 0
+            self.data_ex['tick'] = 0
 
     class RequestHandler(BaseRequestHandler):
 
         def handle(self):
+            interval = time.time()
+            alpha = .85
+            self.server.data_ex['avg-interval'] *= alpha
+            self.server.data_ex['avg-interval'] -= (1-alpha) * interval
+
+            self.server.data_ex['tick'] = (self.server.data_ex['tick'] + 1) % 10
+            if self.server.data_ex['tick'] == 0:
+                print(self.server.data_ex['tick'])
+
+
             data = self.request[0]
             socket = self.request[1]
             if data[0] == 0x99:
